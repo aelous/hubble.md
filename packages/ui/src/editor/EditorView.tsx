@@ -14,6 +14,7 @@ import {
 	RichTextClipboardExtension,
 	resetEditorHistory,
 	tiptapDocToMarkdown,
+	toggleExtensions,
 } from "@hubble.md/editor";
 import type { Editor } from "@tiptap/core";
 import { TaskItem } from "@tiptap/extension-list";
@@ -94,8 +95,17 @@ export type EditorViewProps = {
 	/** Review threads in the open document, republished on every edit, so an
 	 * app can list them in its own chrome. */
 	onReviewThreadsChange?: (threads: ReviewThread[]) => void;
+	/** Published headings, for host apps that render their own outline/TOC. */
+	onHeadingsChange?: (headings: OutlineHeading[]) => void;
 	/** Footer status for non-default spellcheck languages. Desktop-only. */
 	spellcheckStatus?: SpellcheckStatus | null;
+};
+
+export type OutlineHeading = {
+	id: string;
+	level: number;
+	text: string;
+	pos: number;
 };
 
 export function EditorView({
@@ -118,6 +128,7 @@ export function EditorView({
 	onOpenWikiLink,
 	onMessage,
 	onReviewThreadsChange,
+	onHeadingsChange,
 	spellcheckStatus,
 }: EditorViewProps) {
 	const initialFrontMatter = parseMarkdownFrontMatter(initialMarkdown);
@@ -198,6 +209,7 @@ export function EditorView({
 			ReviewMarkExtension,
 			EditorCommandShortcuts,
 			...listExtensions,
+			...toggleExtensions,
 			...extensions,
 			TaskItem.configure({ nested: true }),
 			Table.configure({ resizable: true }),
@@ -207,6 +219,9 @@ export function EditorView({
 			TableCellSelectionExtension,
 		],
 		content: initialDoc,
+		onCreate: ({ editor: current }) => {
+			publishHeadings(current, onHeadingsChange);
+		},
 		onUpdate: ({ editor: current }) => {
 			const doc = current.getJSON() as JSONContent;
 			if (hasUploadImage(doc)) return;
@@ -219,6 +234,7 @@ export function EditorView({
 			latestMarkdownRef.current = markdown;
 			onLocalChange(pathRef.current, markdown);
 			scheduleSave();
+			publishHeadings(current, onHeadingsChange);
 		},
 		editorProps: {
 			...editorProps,
@@ -401,4 +417,39 @@ export function EditorView({
 function hasUploadImage(node: JSONContent): boolean {
 	if (node.type === "image" && node.attrs?.uploadId) return true;
 	return node.content?.some(hasUploadImage) ?? false;
+}
+
+function publishHeadings(
+	editor: Editor,
+	onHeadingsChange: ((headings: OutlineHeading[]) => void) | undefined,
+) {
+	if (!onHeadingsChange) return;
+	const list: OutlineHeading[] = [];
+	editor.state.doc.descendants((node, pos) => {
+		if (node.type.name === "heading") {
+			const text = node.textContent.trim();
+			if (!text) return;
+			list.push({
+				id: `h-${pos}`,
+				level: Number(node.attrs.level ?? 1),
+				text,
+				pos,
+			});
+			return;
+		}
+		if (node.type.name === "toggleBlock") {
+			const level = Number(node.attrs.level ?? 0);
+			if (level < 1 || level > 6) return;
+			const text = node.firstChild?.textContent?.trim() ?? "";
+			if (!text) return;
+			list.push({
+				id: `h-${pos}`,
+				level,
+				text,
+				pos,
+			});
+			return;
+		}
+	});
+	onHeadingsChange(list);
 }

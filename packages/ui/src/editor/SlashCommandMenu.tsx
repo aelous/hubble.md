@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
+import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -103,6 +104,34 @@ const SLASH_COMMANDS: SlashCommand[] = [
 		description: "Create a quote block",
 		aliases: ["blockquote", ">"],
 		icon: MingcuteQuoteLeftLine,
+	},
+	{
+		kind: "toggle",
+		title: "Toggle",
+		description: "Collapsible block for hiding content",
+		aliases: ["toggle", "details", "collapse", "fold", "callout", "折叠", "展开"],
+		icon: MingcuteDownSmallLine,
+	},
+	{
+		kind: "toggleHeading1",
+		title: "Toggle heading 1",
+		description: "Large collapsible heading",
+		aliases: ["toggle h1", "toggleh1", "th1", "collapse h1"],
+		icon: MingcuteDownSmallLine,
+	},
+	{
+		kind: "toggleHeading2",
+		title: "Toggle heading 2",
+		description: "Medium collapsible heading",
+		aliases: ["toggle h2", "toggleh2", "th2", "collapse h2"],
+		icon: MingcuteDownSmallLine,
+	},
+	{
+		kind: "toggleHeading3",
+		title: "Toggle heading 3",
+		description: "Small collapsible heading",
+		aliases: ["toggle h3", "toggleh3", "th3", "collapse h3"],
+		icon: MingcuteDownSmallLine,
 	},
 	{
 		kind: "divider",

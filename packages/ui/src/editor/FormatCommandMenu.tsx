@@ -16,6 +16,7 @@ import {
 import MingcuteBoldLine from "~icons/mingcute/bold-line";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -121,6 +122,38 @@ const FORMAT_COMMANDS: FormatCommand[] = [
 		description: "Convert to quote",
 		aliases: ["blockquote", ">"],
 		icon: MingcuteQuoteLeftLine,
+		group: "Block",
+	},
+	{
+		kind: "toggle",
+		title: "Toggle",
+		description: "Convert to collapsible block",
+		aliases: ["toggle", "details", "collapse", "fold", "折叠"],
+		icon: MingcuteDownSmallLine,
+		group: "Block",
+	},
+	{
+		kind: "toggleHeading1",
+		title: "Toggle heading 1",
+		description: "Convert to large collapsible heading",
+		aliases: ["toggle h1", "toggleh1", "th1"],
+		icon: MingcuteDownSmallLine,
+		group: "Block",
+	},
+	{
+		kind: "toggleHeading2",
+		title: "Toggle heading 2",
+		description: "Convert to medium collapsible heading",
+		aliases: ["toggle h2", "toggleh2", "th2"],
+		icon: MingcuteDownSmallLine,
+		group: "Block",
+	},
+	{
+		kind: "toggleHeading3",
+		title: "Toggle heading 3",
+		description: "Convert to small collapsible heading",
+		aliases: ["toggle h3", "toggleh3", "th3"],
+		icon: MingcuteDownSmallLine,
 		group: "Block",
 	},
 	{

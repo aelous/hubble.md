@@ -11,6 +11,10 @@ export type SlashCommandKind =
 	| "orderedList"
 	| "taskList"
 	| "blockquote"
+	| "toggle"
+	| "toggleHeading1"
+	| "toggleHeading2"
+	| "toggleHeading3"
 	| "divider"
 	| "strike"
 	| "table";
@@ -184,6 +188,27 @@ function createEmptyBlock(
 			);
 		case "blockquote":
 			return blockquote.create(null, paragraph.create());
+		case "toggle":
+		case "toggleHeading1":
+		case "toggleHeading2":
+		case "toggleHeading3": {
+			const toggleBlock = schema.nodes.toggleBlock;
+			const toggleSummary = schema.nodes.toggleSummary;
+			const toggleContent = schema.nodes.toggleContent;
+			if (!toggleBlock || !toggleSummary || !toggleContent) return null;
+			const level =
+				kind === "toggleHeading1"
+					? 1
+					: kind === "toggleHeading2"
+						? 2
+						: kind === "toggleHeading3"
+							? 3
+							: 0;
+			return toggleBlock.create(
+				{ open: false, level },
+				[toggleSummary.create(), toggleContent.create(null, paragraph.create())],
+			);
+		}
 		case "divider":
 			return horizontalRule.create();
 		case "strike":
@@ -192,12 +217,11 @@ function createEmptyBlock(
 	}
 }
 
-function selectionOffsetInsideNode(node: PMNode) {
+function selectionOffsetInsideNode(node: PMNode): number {
 	if (node.isTextblock) return 1;
-	if (node.type.name === "blockquote") return 2;
-	if (node.type.name === "bulletList" || node.type.name === "orderedList")
-		return 3;
-	return 0;
+	const child = node.firstChild;
+	if (!child) return 1;
+	return 1 + selectionOffsetInsideNode(child);
 }
 
 function selectionPositionInsideNode(node: PMNode | null, nodeStart: number) {

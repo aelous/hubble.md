@@ -65,6 +65,7 @@ export type AppCommandActions = {
 	focusSidebar: () => void;
 	openNewTab: () => void;
 	toggleAllTabs: () => void;
+	toggleOutline: () => void;
 };
 
 function toRegistryContext(context: AppCommandContext): RegistryContext {
@@ -327,6 +328,12 @@ function defineCommands(
 			"checklist",
 		]),
 		editorCommand("editor.blockquote", "blockquote", ["quote", "citation"]),
+		editorCommand("editor.insert-date", "insert-date", [
+			"date",
+			"today",
+			"timestamp",
+			"yyyy-mm-dd",
+		]),
 
 		// View
 		fromRegistry(
@@ -335,6 +342,12 @@ function defineCommands(
 			["files", "panel", "explorer"],
 			toggleSidebar,
 			{ label: context.sidebarOpen ? "Hide Sidebar" : "Show Sidebar" },
+		),
+		fromRegistry(
+			"app.toggle-outline",
+			"View",
+			["outline", "toc", "headings", "table of contents", "大纲", "目录"],
+			actions.toggleOutline,
 		),
 		fromRegistry(
 			"app.show-folders",

@@ -144,6 +144,11 @@ export const commandRegistry = {
 		label: "Toggle Sidebar",
 		isEnabled: always,
 	},
+	"app.toggle-outline": {
+		defaultBinding: "CmdOrCtrl+Shift+L",
+		label: "Toggle Outline",
+		isEnabled: hasCurrentFile,
+	},
 	"app.show-folders": {
 		defaultBinding: "CmdOrCtrl+Shift+E",
 		label: "Show Folders",
@@ -253,6 +258,11 @@ export const commandRegistry = {
 	"editor.blockquote": {
 		defaultBinding: "CmdOrCtrl+Shift+B",
 		label: "Quote",
+		isEnabled: always,
+	},
+	"editor.insert-date": {
+		defaultBinding: "CmdOrCtrl+Shift+D",
+		label: "Insert Date",
 		isEnabled: always,
 	},
 } as const satisfies Record<string, CommandDefinition>;

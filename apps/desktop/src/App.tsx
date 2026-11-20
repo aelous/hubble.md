@@ -16,6 +16,7 @@ import {
 	getActiveEditor,
 	MarkdownSourceEditor,
 	OPEN_COMMAND_PALETTE_EVENT,
+	type OutlineHeading,
 	type PaletteFile,
 	PlainTextEditor,
 	type SpellcheckStatus,
@@ -41,6 +42,7 @@ import { buildAppCommands } from "./commands/useAppCommands";
 import { FileInfoBar } from "./components/FileInfoBar";
 import { HtmlAppEmptyState } from "./components/HtmlAppEmptyState";
 import { NewTabPage } from "./components/NewTabPage";
+import { OutlinePanel } from "./components/OutlinePanel";
 import { Settings, type SettingsTarget } from "./components/Settings";
 import { type DesktopSidebarFocus, Sidebar } from "./components/Sidebar";
 import { SkippedSkillsDialog } from "./components/SkippedSkillsDialog";
@@ -253,6 +255,8 @@ function App() {
 	};
 	const [allTabsOpen, setAllTabsOpen] = useState(false);
 	const [copyAsMarkdownRequest, setCopyAsMarkdownRequest] = useState(0);
+	const [outlineOpen, setOutlineOpen] = useState(false);
+	const [outlineHeadings, setOutlineHeadings] = useState<OutlineHeading[]>([]);
 	const [updateState, setUpdateState] = useState<DesktopUpdateState | null>(
 		null,
 	);
@@ -376,6 +380,7 @@ function App() {
 			focusSidebar: focusSidebarNav,
 			openNewTab: () => openNewTabPage(),
 			toggleAllTabs: () => setAllTabsOpen((open) => !open),
+			toggleOutline: () => setOutlineOpen((open) => !open),
 		},
 		{
 			currentPath: state.currentPath ?? null,
@@ -582,6 +587,7 @@ function App() {
 					setSidebarOpen(opening);
 					if (opening) requestAnimationFrame(() => focusSidebarNav());
 				},
+				"app.toggle-outline": () => setOutlineOpen((open) => !open),
 				"app.show-folders": () => showSidebarView("folders"),
 				"app.show-inbox": () => showSidebarView("inbox"),
 			};
@@ -916,11 +922,12 @@ function App() {
 					aria-live="polite"
 					onFocusCapture={closeSidebarOverlay}
 				>
-					<div className="flex-1 min-h-0 min-w-0 flex flex-col">
-						{showTabStrip && isFileOpen ? (
-							<FileInfoBar scrollContainer={scrollContainerEl} />
-						) : null}
-						<div data-note-body className="flex-1 min-h-0 min-w-0 relative">
+					<div className="flex-1 min-w-0 min-h-0 flex flex-row overflow-hidden">
+						<div className="flex-1 min-h-0 min-w-0 flex flex-col">
+							{showTabStrip && isFileOpen ? (
+								<FileInfoBar scrollContainer={scrollContainerEl} />
+							) : null}
+							<div data-note-body className="flex-1 min-h-0 min-w-0 relative">
 							{state.status === "loading" && <p>Loading…</p>}
 							{state.status === "error" && (
 								<p>{state.error ?? "Failed to open file."}</p>
@@ -963,10 +970,18 @@ function App() {
 											viewMode={state.viewMode}
 											spellcheckStatus={spellcheckStatus}
 											onScrollContainerChange={setScrollContainerEl}
+											onHeadingsChange={setOutlineHeadings}
 										/>
 									</div>
 								)}
 						</div>
+						</div>
+						{outlineOpen && isFileOpen ? (
+							<OutlinePanel
+								headings={outlineHeadings}
+								onClose={() => setOutlineOpen(false)}
+							/>
+						) : null}
 					</div>
 					<TerminalPanel />
 				</section>
@@ -1001,6 +1016,7 @@ function DocumentViewer({
 	viewMode,
 	spellcheckStatus,
 	onScrollContainerChange,
+	onHeadingsChange,
 }: {
 	path: string;
 	content: string;
@@ -1008,6 +1024,7 @@ function DocumentViewer({
 	viewMode: ViewMode;
 	spellcheckStatus?: SpellcheckStatus | null;
 	onScrollContainerChange?: (el: HTMLDivElement | null) => void;
+	onHeadingsChange?: (headings: OutlineHeading[]) => void;
 }) {
 	const documentId = editorDocumentId(path);
 	if (viewMode === "source" && supportsSourceToggle(path)) {
@@ -1102,6 +1119,7 @@ function DocumentViewer({
 			copyAsMarkdownRequest={copyAsMarkdownRequest}
 			spellcheckStatus={spellcheckStatus}
 			onScrollContainerChange={onScrollContainerChange}
+			onHeadingsChange={onHeadingsChange}
 		/>
 	);
 }
@@ -1183,6 +1201,7 @@ function MarkdownEditor({
 	copyAsMarkdownRequest,
 	spellcheckStatus,
 	onScrollContainerChange,
+	onHeadingsChange,
 }: {
 	path: string;
 	documentId: string;
@@ -1190,6 +1209,7 @@ function MarkdownEditor({
 	copyAsMarkdownRequest: number;
 	spellcheckStatus?: SpellcheckStatus | null;
 	onScrollContainerChange?: (el: HTMLDivElement | null) => void;
+	onHeadingsChange?: (headings: OutlineHeading[]) => void;
 }) {
 	const workspace = useStoreValue(workspaceStore);
 	const getPath = () => viewerStore.get().currentPath ?? path;
@@ -1265,6 +1285,7 @@ function MarkdownEditor({
 				kind === "success" ? toast.success(message) : toast.error(message)
 			}
 			onReviewThreadsChange={setReviewThreads}
+			onHeadingsChange={onHeadingsChange}
 			spellcheckStatus={spellcheckStatus}
 		/>
 	);

@@ -87,6 +87,12 @@ export {
 } from "./RichTextClipboardExtension.js";
 export { StoredMarksDecorationExtension } from "./StoredMarksDecorationExtension.js";
 export {
+	ToggleBlock,
+	ToggleContent,
+	ToggleSummary,
+	toggleExtensions,
+} from "./ToggleBlock.js";
+export {
 	isSelectionAtStartOfNode,
 	nearestSharedParentOfType,
 	parentsOfType,

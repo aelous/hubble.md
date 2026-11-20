@@ -58,6 +58,29 @@ function blockToMarkdown(node: JSONContent): string {
 				.join("\n");
 		}
 
+		case "toggleBlock": {
+			const summaryNode = node.content?.[0];
+			const contentNode = node.content?.[1];
+			const summaryInline = summaryNode
+				? inlineToMarkdown(summaryNode.content ?? [])
+				: "";
+			const level = Number(node.attrs?.level ?? 0);
+			const summary =
+				level >= 1 && level <= 3
+					? `${"#".repeat(level)} ${summaryInline}`.trimEnd()
+					: summaryInline;
+			const bodyBlocks = contentNode?.content ?? [];
+			const body = bodyBlocks
+				.map(blockToMarkdown)
+				.filter(Boolean)
+				.join("\n\n");
+			const flag = node.attrs?.open ? "+" : "-";
+			const header = `[!note]${flag} ${summary}`.trimEnd();
+			const bodyLines = body.split("\n");
+			const linesToQuote = body ? [header, "", ...bodyLines] : [header];
+			return linesToQuote.map((line) => (line ? `> ${line}` : ">")).join("\n");
+		}
+
 		case "codeBlock": {
 			const content =
 				node.content

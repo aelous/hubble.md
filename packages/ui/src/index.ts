@@ -39,6 +39,7 @@ export {
 export {
 	EditorView,
 	type EditorViewProps,
+	type OutlineHeading,
 	type WikiTarget,
 } from "./editor/EditorView";
 export type { SpellcheckStatus } from "./editor/FormattingStatusBar";

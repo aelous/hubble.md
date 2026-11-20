@@ -14,6 +14,10 @@ export type FormatCommandKind =
 	| "orderedList"
 	| "taskList"
 	| "blockquote"
+	| "toggle"
+	| "toggleHeading1"
+	| "toggleHeading2"
+	| "toggleHeading3"
 	| "divider"
 	| "bold"
 	| "italic"
@@ -47,6 +51,14 @@ export function isFormatActive(editor: Editor, kind: FormatCommandKind) {
 			return taskListActive;
 		case "blockquote":
 			return editor.isActive("blockquote");
+		case "toggle":
+			return editor.isActive("toggleBlock", { level: 0 });
+		case "toggleHeading1":
+			return editor.isActive("toggleBlock", { level: 1 });
+		case "toggleHeading2":
+			return editor.isActive("toggleBlock", { level: 2 });
+		case "toggleHeading3":
+			return editor.isActive("toggleBlock", { level: 3 });
 		case "bold":
 			return editor.isActive("bold");
 		case "italic":
@@ -87,6 +99,18 @@ export function applyFormatCommand(editor: Editor, kind: FormatCommandKind) {
 			return;
 		case "blockquote":
 			chain.toggleBlockquote().run();
+			return;
+		case "toggle":
+			convertCurrentBlockToToggle(editor, 0);
+			return;
+		case "toggleHeading1":
+			convertCurrentBlockToToggle(editor, 1);
+			return;
+		case "toggleHeading2":
+			convertCurrentBlockToToggle(editor, 2);
+			return;
+		case "toggleHeading3":
+			convertCurrentBlockToToggle(editor, 3);
 			return;
 		case "divider":
 			chain.setHorizontalRule().run();
@@ -152,4 +176,47 @@ export function removeLinksInSelection(editor: Editor): boolean {
 	for (const range of touching) tr.removeMark(range.from, range.to, linkType);
 	editor.view.dispatch(tr);
 	return true;
+}
+
+/**
+ * Turn the current top-level block into a Toggle. Preserves its visible text as
+ * the Toggle's summary.
+ */
+function convertCurrentBlockToToggle(
+	editor: Editor,
+	level: 0 | 1 | 2 | 3,
+) {
+	const { state } = editor;
+	const schema = state.schema;
+	const toggleBlock = schema.nodes.toggleBlock;
+	const toggleSummary = schema.nodes.toggleSummary;
+	const toggleContent = schema.nodes.toggleContent;
+	const paragraph = schema.nodes.paragraph;
+	if (!toggleBlock || !toggleSummary || !toggleContent || !paragraph) return;
+	const { $from } = state.selection;
+	const topDepth = 1;
+	if ($from.depth < topDepth) return;
+	const blockStart = $from.before(topDepth);
+	const blockEnd = $from.after(topDepth);
+	const current = state.doc.nodeAt(blockStart);
+	const summaryText = current?.textContent ?? "";
+	const toggle = toggleBlock.create(
+		{ open: false, level },
+		[
+			toggleSummary.create(
+				null,
+				summaryText ? schema.text(summaryText) : undefined,
+			),
+			toggleContent.create(null, paragraph.create()),
+		],
+	);
+	editor
+		.chain()
+		.focus(undefined, { scrollIntoView: false })
+		.command(({ tr, dispatch }) => {
+			if (!dispatch) return true;
+			tr.replaceWith(blockStart, blockEnd, toggle);
+			return true;
+		})
+		.run();
 }

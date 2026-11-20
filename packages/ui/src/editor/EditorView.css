@@ -289,6 +289,101 @@
 	color: color-mix(in oklab, var(--foreground) 78%, var(--muted-foreground));
 }
 
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"] {
+	margin-block: 0.25rem;
+	position: relative;
+}
+
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"] summary {
+	list-style: none;
+	cursor: text;
+	position: relative;
+	outline: none;
+	display: block;
+}
+
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"] summary::-webkit-details-marker {
+	display: none;
+}
+
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-open="false"] [data-toggle-content] {
+	display: none;
+}
+
+[data-hubble-editor] .ProseMirror [data-toggle-chevron] {
+	position: absolute;
+	inset-inline-start: -1.25rem;
+	inset-block-start: 0.35em;
+	inline-size: 1rem;
+	block-size: 1rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	user-select: none;
+	color: color-mix(in oklab, var(--foreground) 55%, var(--muted-foreground));
+	border-radius: 2px;
+	transition: transform 120ms ease, background-color 120ms ease;
+	transform-origin: 50% 50%;
+	z-index: 1;
+}
+[data-hubble-editor] .ProseMirror [data-toggle-chevron]:hover {
+	background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+[data-hubble-editor] .ProseMirror [data-toggle-chevron][data-empty] {
+	opacity: 0.4;
+	cursor: default;
+}
+[data-hubble-editor] .ProseMirror [data-toggle-chevron][data-empty]:hover {
+	background: transparent;
+}
+[data-hubble-editor] .ProseMirror [data-toggle-chevron]::before {
+	content: "";
+	inline-size: 0;
+	block-size: 0;
+	border-inline-start: 5px solid currentColor;
+	border-block-start: 4px solid transparent;
+	border-block-end: 4px solid transparent;
+}
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-open="true"] > [data-toggle-chevron] {
+	transform: rotate(90deg);
+}
+
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"] summary:empty::after {
+	content: "Toggle";
+	color: var(--muted-foreground);
+	opacity: 0.6;
+}
+
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"] [data-toggle-content] {
+	margin-block-start: 0.25rem;
+}
+
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-level="1"] summary {
+	font-size: 1.6em;
+	font-weight: 700;
+	line-height: 1.25;
+}
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-level="2"] summary {
+	font-size: 1.3em;
+	font-weight: 700;
+	line-height: 1.3;
+}
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-level="3"] summary {
+	font-size: 1.1em;
+	font-weight: 600;
+	line-height: 1.35;
+}
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-level="1"] > [data-toggle-chevron] {
+	inset-block-start: 0.6em;
+}
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-level="2"] > [data-toggle-chevron] {
+	inset-block-start: 0.5em;
+}
+[data-hubble-editor] .ProseMirror [data-type="toggle-block"][data-level="3"] > [data-toggle-chevron] {
+	inset-block-start: 0.45em;
+}
+
 [data-hubble-editor] .ProseMirror hr {
 	border: 0;
 	border-block-start: 1px solid var(--border);

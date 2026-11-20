@@ -78,6 +78,14 @@ export const EditorCommandShortcuts = Extension.create({
 					return this.editor.commands.toggleHeading({ level: 6 });
 				case "editor.blockquote":
 					return this.editor.commands.toggleBlockquote();
+				case "editor.insert-date": {
+					const d = new Date();
+					const yyyy = d.getFullYear();
+					const mm = String(d.getMonth() + 1).padStart(2, "0");
+					const dd = String(d.getDate()).padStart(2, "0");
+					const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()];
+					return this.editor.commands.insertContent(`${yyyy}-${mm}-${dd} ${week}`);
+				}
 			}
 		};
 
@@ -113,4 +121,5 @@ const editorCommandIds: EditorCommandId[] = [
 	"editor.heading-5",
 	"editor.heading-6",
 	"editor.blockquote",
+	"editor.insert-date",
 ];
