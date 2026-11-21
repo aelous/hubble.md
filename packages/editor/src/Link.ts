@@ -1,5 +1,8 @@
-import { Mark, mergeAttributes } from "@tiptap/core";
+import { Mark, mergeAttributes, PasteRule } from "@tiptap/core";
 import type { EditorState } from "@tiptap/pm/state";
+import { wikiDisplayNameForTarget } from "./markdownPath.js";
+
+const WIKI_LINK_PASTE_PATTERN = /\[\[([^\]\n]+)\]\]/g;
 
 export const LinkExtension = Mark.create({
 	name: "link",
@@ -67,6 +70,39 @@ export const LinkExtension = Mark.create({
 				"data-link": "true",
 			}),
 			0,
+		];
+	},
+
+	/**
+	 * Convert pasted `[[target]]` / `[[target|alias]]` plain text into a wiki
+	 * link mark. Mirrors the Markdown-to-ProseMirror converter so the author
+	 * can copy a wiki link in any note (or the sidebar) and paste it as a
+	 * styled link rather than literal brackets.
+	 */
+	addPasteRules() {
+		const markType = this.type;
+		return [
+			new PasteRule({
+				find: WIKI_LINK_PASTE_PATTERN,
+				handler: ({ state, range, match }) => {
+					const raw = match[1];
+					if (!raw) return;
+					const separatorIndex = raw.indexOf("|");
+					const rawTarget =
+						separatorIndex === -1 ? raw : raw.slice(0, separatorIndex);
+					const rawAlias =
+						separatorIndex === -1 ? "" : raw.slice(separatorIndex + 1);
+					const target = rawTarget.trim();
+					if (!target) return;
+					const visible = rawAlias || wikiDisplayNameForTarget(target);
+					const { tr, schema } = state;
+					const textNode = schema.text(visible, [
+						markType.create({ href: target, kind: "wiki", target }),
+					]);
+					tr.replaceRangeWith(range.from, range.to, textNode);
+					tr.removeStoredMark(markType);
+				},
+			}),
 		];
 	},
 });

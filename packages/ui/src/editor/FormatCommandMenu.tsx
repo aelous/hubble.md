@@ -16,6 +16,7 @@ import {
 import MingcuteBoldLine from "~icons/mingcute/bold-line";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
 import MingcuteCheckLine from "~icons/mingcute/check-line";
+import MingcuteDocumentLine from "~icons/mingcute/document-line";
 import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
@@ -47,8 +48,18 @@ type FormatCommand = {
 	aliases: string[];
 	icon: ComponentType<{ className?: string }>;
 	group: "Block" | "Inline";
+	/**
+	 * Hide the command when it would be a no-op (e.g. "Copy page link" without
+	 * an open workspace file). Defaults to always visible.
+	 */
+	isAvailable?: (context: FormatCommandAvailability) => boolean;
 	// Stable registry ID. Omit when the command has no shortcut.
 	shortcut?: CommandId;
+};
+
+export type FormatCommandAvailability = {
+	/** True when a real workspace file is open in the editor. */
+	hasOpenWorkspaceFile: boolean;
 };
 
 type MenuPosition = {
@@ -165,6 +176,23 @@ const FORMAT_COMMANDS: FormatCommand[] = [
 		group: "Block",
 	},
 	{
+		kind: "turnIntoPage",
+		title: "Turn into page",
+		description: "Move this block into a new child page",
+		aliases: ["page", "child", "childpage", "extract", "promote"],
+		icon: MingcuteDocumentLine,
+		group: "Block",
+	},
+	{
+		kind: "copyPageLink",
+		title: "Copy page link",
+		description: "Copy a wiki link to this page",
+		aliases: ["copy", "link", "wiki", "share"],
+		icon: MingcuteLinkLine,
+		group: "Block",
+		isAvailable: (context) => context.hasOpenWorkspaceFile,
+	},
+	{
 		kind: "bold",
 		title: "Bold",
 		description: "Toggle bold",
@@ -205,9 +233,12 @@ const FORMAT_COMMANDS: FormatCommand[] = [
 export function FormatCommandMenu({
 	editor,
 	viewportRef,
+	hasOpenWorkspaceFile = false,
 }: {
 	editor: Editor | null;
 	viewportRef: RefObject<HTMLDivElement | null>;
+	/** Controls availability of commands that act on the open workspace file. */
+	hasOpenWorkspaceFile?: boolean;
 }) {
 	const commandBindings = useCommandBindings();
 	const [open, setOpen] = useState(false);
@@ -217,8 +248,11 @@ export function FormatCommandMenu({
 		useState<FormatCommandKind>("paragraph");
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const menuRef = useRef<HTMLDivElement | null>(null);
-	const visibleCommands = FORMAT_COMMANDS.filter((command) =>
-		matchesCommand(command, query),
+	const availability: FormatCommandAvailability = { hasOpenWorkspaceFile };
+	const visibleCommands = FORMAT_COMMANDS.filter(
+		(command) =>
+			(command.isAvailable?.(availability) ?? true) &&
+			matchesCommand(command, query),
 	);
 	const activeKind = visibleCommands.some(
 		(command) => command.kind === selectedKind,

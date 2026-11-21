@@ -64,13 +64,22 @@ describe("link where text equals href", () => {
 });
 
 describe("wikilink markdown conversion", () => {
-	it("parses wikilinks into wiki link marks", () => {
+	it("parses a lone wikilink into a childPage block", () => {
 		const doc = markdownToTiptapDoc("[[Notes/File 2.md]]");
+		expect(doc.content?.[0]).toEqual({
+			type: "childPage",
+			attrs: { href: "Notes/File 2.md" },
+		});
+	});
+
+	it("parses wikilinks inside paragraphs as wiki link marks", () => {
+		const doc = markdownToTiptapDoc("See [[Notes/File 2.md]] for details");
 		const paragraph = doc.content?.[0];
-		const textNode = paragraph?.content?.[0];
-		expect(textNode?.type).toBe("text");
-		expect(textNode?.text).toBe("File 2");
-		expect(textNode?.marks).toEqual([
+		expect(paragraph?.type).toBe("paragraph");
+		const linkNode = paragraph?.content?.[1];
+		expect(linkNode?.type).toBe("text");
+		expect(linkNode?.text).toBe("File 2");
+		expect(linkNode?.marks).toEqual([
 			{
 				type: "link",
 				attrs: {
@@ -115,5 +124,30 @@ describe("wikilink markdown conversion", () => {
 			],
 		});
 		expect(markdown).toBe("[[Notes/File 2.md]]");
+	});
+});
+
+describe("childPage markdown round-trip", () => {
+	it("serializes a childPage block to a lone wiki link", () => {
+		const markdown = tiptapDocToMarkdown({
+			type: "doc",
+			content: [{ type: "childPage", attrs: { href: "Notes/Sub" } }],
+		});
+		expect(markdown).toBe("[[Notes/Sub]]");
+	});
+
+	it("round-trips a childPage block through markdown", () => {
+		const input = "[[Notes/Sub]]";
+		const doc = markdownToTiptapDoc(input);
+		expect(doc.content?.[0]).toEqual({
+			type: "childPage",
+			attrs: { href: "Notes/Sub" },
+		});
+		expect(tiptapDocToMarkdown(doc)).toBe(input);
+	});
+
+	it("keeps aliased lone wiki links as inline wiki marks", () => {
+		const doc = markdownToTiptapDoc("[[Notes/Sub|Custom]]");
+		expect(doc.content?.[0]?.type).toBe("paragraph");
 	});
 });

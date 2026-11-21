@@ -95,6 +95,12 @@ function blockToMarkdown(node: JSONContent): string {
 			return "---";
 		}
 
+		case "childPage": {
+			const href = typeof node.attrs?.href === "string" ? node.attrs.href : "";
+			if (!href) return "";
+			return `[[${href}]]`;
+		}
+
 		case "orderedList": {
 			const start = node.attrs?.start ?? 1;
 			return (node.content ?? [])

@@ -394,6 +394,34 @@
 	border-radius: 2px;
 }
 
+/* LK-09: child-page block whose target doesn't resolve to a workspace file.
+   The ChildPage NodeView already renders the hook; WikiLinkValidityExtension
+   adds the data-child-page-missing attribute via a node decoration. */
+[data-hubble-editor]
+	.ProseMirror
+	[data-type="child-page"][data-child-page-missing="true"]
+	[data-child-page-link] {
+	color: var(--muted-foreground);
+	border-style: dashed;
+}
+
+/* LK-09: wiki link whose target doesn't resolve to a workspace file.
+   Muted color + dashed underline signals "no destination" while the
+   LinkClickExtension no-ops click to prevent navigation. */
+[data-hubble-editor] .ProseMirror [data-link-kind="wiki"][data-link-invalid] {
+	color: var(--muted-foreground);
+	text-decoration-line: underline;
+	text-decoration-style: dashed;
+	text-decoration-color: color-mix(
+		in oklab,
+		var(--muted-foreground) 55%,
+		transparent
+	);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+	cursor: default;
+}
+
 [data-hubble-editor] .pm-find-match {
 	--pm-find-tint: color-mix(in oklab, var(--brand) 48%, var(--foreground));
 	background: color-mix(in oklab, var(--pm-find-tint) 36%, transparent);

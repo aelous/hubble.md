@@ -12,12 +12,14 @@ import { copyText } from "../lib/clipboard";
 import { isCompactWindow, useCompactWindow } from "../lib/layout";
 import { revealFileLabel } from "../lib/revealFile";
 import {
+	copyPageLink,
 	createFolderInFolder,
 	createHtmlFileInFolder,
 	createMarkdownFileInFolder,
 	deleteFolder,
 	deleteMarkdownFile,
 	deleteSidebarItems,
+	duplicateSidebarItem,
 	loadPath,
 	moveSidebarItems,
 	openBackgroundTab,
@@ -155,6 +157,8 @@ export function Sidebar({
 			onOpenFileInDefaultApp={fileActions.onOpenFileInDefaultApp}
 			onRevealFile={fileActions.onRevealFile}
 			onCopyFilePath={fileActions.onCopyFilePath}
+			onCopyPageLink={(path) => void copyPageLink(path)}
+			onDuplicateFile={(path) => void duplicateSidebarItem(path)}
 			onRevealFolder={(folderId) =>
 				void desktopApi.revealFile(absolutePath(folderId))
 			}

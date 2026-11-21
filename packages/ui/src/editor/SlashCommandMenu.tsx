@@ -10,6 +10,7 @@ import {
 } from "react";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
 import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
+import MingcuteDocumentLine from "~icons/mingcute/document-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -155,10 +156,24 @@ const SLASH_COMMANDS: SlashCommand[] = [
 		aliases: ["table", "grid"],
 		icon: MingcuteTable2Line,
 	},
+	{
+		kind: "linkToPage",
+		title: "Link to page",
+		description: "Insert a link to another page",
+		aliases: ["link", "mention", "wiki", "@"],
+		icon: MingcuteDocumentLine,
+	},
+	{
+		kind: "childPage",
+		title: "Child page",
+		description: "Create a new sub-page inside this note",
+		aliases: ["page", "sub", "subpage", "child", "new page", "子页面", "子"],
+		icon: MingcuteDocumentLine,
+	},
 ];
 
 // Table cells only hold inline content, so block commands are hidden there.
-const INLINE_COMMANDS = new Set<SlashCommandKind>(["strike"]);
+const INLINE_COMMANDS = new Set<SlashCommandKind>(["strike", "linkToPage"]);
 
 export function SlashCommandMenu({
 	editor,

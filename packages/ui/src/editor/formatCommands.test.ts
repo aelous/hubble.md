@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { TURN_INTO_PAGE_EVENT, type TurnIntoPageDetail } from "@hubble.md/editor";
 import { Editor, type JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
@@ -188,6 +189,40 @@ describe("link format command", () => {
 				{ type: "text", text: " zz" },
 			],
 		});
+	});
+});
+
+describe("turnIntoPage", () => {
+	it("dispatches an event with the enclosing block's markdown", () => {
+		const editor = createEditor({
+			type: "doc",
+			content: [
+				{
+					type: "heading",
+					attrs: { level: 2 },
+					content: [{ type: "text", text: "hello" }],
+				},
+			],
+		});
+		selectText(editor, 2, 2);
+		const events: TurnIntoPageDetail[] = [];
+		const listener = (event: Event) => {
+			events.push((event as CustomEvent<TurnIntoPageDetail>).detail);
+		};
+		window.addEventListener(TURN_INTO_PAGE_EVENT, listener);
+		try {
+			applyFormatCommand(editor, "turnIntoPage");
+		} finally {
+			window.removeEventListener(TURN_INTO_PAGE_EVENT, listener);
+		}
+		expect(events).toHaveLength(1);
+		expect(events[0].blockMarkdown).toBe("## hello");
+		expect(events[0].blockEnd).toBeGreaterThan(events[0].blockStart);
+	});
+
+	it("is always reported as inactive", () => {
+		const editor = createEditor(docWithParagraph("hi"));
+		expect(isFormatActive(editor, "turnIntoPage")).toBe(false);
 	});
 });
 

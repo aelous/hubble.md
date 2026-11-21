@@ -42,6 +42,7 @@ export {
 	type OutlineHeading,
 	type WikiTarget,
 } from "./editor/EditorView";
+export { COPY_PAGE_LINK_EVENT } from "./editor/formatCommands";
 export type { SpellcheckStatus } from "./editor/FormattingStatusBar";
 export { FormattingStatusBar } from "./editor/FormattingStatusBar";
 export { classifyHref } from "./editor/href";

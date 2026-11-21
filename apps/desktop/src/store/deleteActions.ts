@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { undoToastLabel } from "../components/undoToastLabel";
 import { desktopApi } from "../desktopApi";
 import { pathInFolder } from "../lib/filePath";
+import { withCascadedPairs } from "./deleteCascade";
 import { clearHistory, pruneHistory } from "./history";
 import {
 	appStore,
@@ -298,7 +299,12 @@ export function createDeleteActions(deps: DeleteDeps) {
 		if (deleting) return;
 		deleting = true;
 		try {
-			await runDelete(items);
+			const knownFolderPaths = new Set(
+				workspaceStore
+					.get()
+					.folders.map((folder) => folder.path.toLocaleLowerCase()),
+			);
+			await runDelete(withCascadedPairs(items, knownFolderPaths));
 		} finally {
 			deleting = false;
 		}

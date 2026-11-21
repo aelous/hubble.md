@@ -6,7 +6,11 @@ import {
 	useState,
 } from "react";
 import { z } from "zod/v4";
-import { fileNameFromPath, normalizeDisplayPath } from "../lib/filePath";
+import {
+	fileNameFromPath,
+	normalizeDisplayPath,
+	splitFileName,
+} from "../lib/filePath";
 
 export type SidebarSortMode = "alpha" | "recent";
 export type SidebarFile = {
@@ -23,7 +27,12 @@ type FolderNode = {
 	id: string;
 	name: string;
 	folders: Map<string, FolderNode>;
-	files: SidebarFile[];
+	files: TreeFileNode[];
+};
+
+type TreeFileNode = {
+	file: SidebarFile;
+	pairedFolder: FolderNode | null;
 };
 
 export type SidebarRow =
@@ -46,6 +55,15 @@ export type SidebarRow =
 			file: SidebarFile;
 			label: string;
 			depth: number;
+	  }
+	| {
+			kind: "pairedFile";
+			file: SidebarFile;
+			label: string;
+			depth: number;
+			expanded: boolean;
+			/** The companion folder's id — DnD routes drops here, children render under. */
+			folderId: string;
 	  };
 
 export type SidebarFolderSegment = {
@@ -124,7 +142,9 @@ export function useSidebarTree({
 	useEffect(() => {
 		if (!highlightPath || revealedPathRef.current === highlightPath) return;
 		revealedPathRef.current = highlightPath;
-		const activeAncestorIds = getFolderAncestorIds(
+		const activeAncestorIds = getRevealAncestorKeys(
+			tree,
+			highlightPath,
 			getDisplayPath(highlightPath),
 		);
 		if (activeAncestorIds.size === 0) return;
@@ -143,7 +163,7 @@ export function useSidebarTree({
 			}
 			return changed ? { key: storageKey, folders: next } : current;
 		});
-	}, [getDisplayPath, highlightPath, storageKey]);
+	}, [getDisplayPath, highlightPath, storageKey, tree]);
 
 	const setExpanded = (id: string, expanded: boolean) => {
 		setExpandedState((current) => {
@@ -229,13 +249,47 @@ export function buildFileTree(
 		}
 
 		parent.files.push({
-			...file,
-			path: file.path,
-			modifiedAt,
+			file: {
+				...file,
+				path: file.path,
+				modifiedAt,
+			},
+			pairedFolder: null,
 		});
 	}
 
+	applySubpagePairing(root);
+
 	return root;
+}
+
+/**
+ * Subpage-pair convention: if `A.md` and a non-empty sibling folder `A/`
+ * both exist, treat `A.md` as the row for the pair — the folder's contents
+ * nest under the file. The folder is removed from its parent so it does not
+ * also render as a top-level entry. Empty folders are left unpaired so we
+ * never surface a chevron that reveals nothing.
+ */
+function applySubpagePairing(folder: FolderNode) {
+	for (const file of folder.files) {
+		const { name, extension } = splitFileName(file.file.path);
+		if (extension.toLocaleLowerCase() !== ".md") continue;
+		const stem = fileNameFromPath(name);
+		if (!stem) continue;
+		const sibling = folder.folders.get(stem);
+		if (!sibling) continue;
+		if (isFolderEmpty(sibling)) continue;
+		file.pairedFolder = sibling;
+		folder.folders.delete(stem);
+	}
+	for (const child of folder.folders.values()) applySubpagePairing(child);
+	for (const file of folder.files) {
+		if (file.pairedFolder) applySubpagePairing(file.pairedFolder);
+	}
+}
+
+function isFolderEmpty(folder: FolderNode): boolean {
+	return folder.files.length === 0 && folder.folders.size === 0;
 }
 
 function ensureFolder(parent: FolderNode, name: string): FolderNode {
@@ -255,6 +309,12 @@ function getFolderIds(tree: FolderNode, uncompactFolderId: string | null) {
 			const compacted = compactFolder(child, uncompactFolderId);
 			for (const segment of compacted.segments) ids.push(segment.id);
 			walk(compacted.folder);
+		}
+		for (const file of folder.files) {
+			if (file.pairedFolder) {
+				ids.push(file.file.path);
+				walk(file.pairedFolder);
+			}
 		}
 	};
 	walk(tree);
@@ -311,7 +371,9 @@ function appendFolderChildren(
 	uncompactFolderId: string | null,
 ) {
 	const folders = [...folder.folders.values()].sort(compareFolders);
-	const files = [...folder.files].sort((a, b) => compareFiles(a, b, sortMode));
+	const files = [...folder.files].sort((a, b) =>
+		compareFiles(a.file, b.file, sortMode),
+	);
 
 	for (const child of folders) {
 		const compacted = compactFolder(child, uncompactFolderId);
@@ -336,8 +398,31 @@ function appendFolderChildren(
 		}
 	}
 
-	for (const file of files) {
+	for (const entry of files) {
+		const file = entry.file;
 		if (file.pinned) continue;
+		if (entry.pairedFolder) {
+			const expanded = expandedFolders.has(file.path);
+			rows.push({
+				kind: "pairedFile",
+				file,
+				label: fileNameFromPath(file.path),
+				depth,
+				expanded,
+				folderId: entry.pairedFolder.id,
+			});
+			if (expanded) {
+				appendFolderChildren(
+					entry.pairedFolder,
+					depth + 1,
+					sortMode,
+					expandedFolders,
+					rows,
+					uncompactFolderId,
+				);
+			}
+			continue;
+		}
 		rows.push({
 			kind: "file",
 			file,
@@ -401,16 +486,42 @@ function compareNames(a: string, b: string) {
 	return nameCollator.compare(a, b) || a.localeCompare(b);
 }
 
-function getFolderAncestorIds(displayPath: string): Set<string> {
+/**
+ * Walk `tree` to the file identified by `targetPath`, collecting the expand
+ * keys for every ancestor row so a highlighted file can be auto-revealed.
+ * Folder rows key off their id; paired-file rows key off the file path.
+ */
+function getRevealAncestorKeys(
+	tree: FolderNode,
+	targetPath: string,
+	displayPath: string,
+): Set<string> {
 	const segments = normalizeDisplayPath(displayPath).split("/").filter(Boolean);
-	segments.pop();
-	const ancestors = new Set<string>();
-	let current = "";
+	const fileName = segments.pop();
+	if (!fileName) return new Set();
+	const keys = new Set<string>();
+	let cursor = tree;
 	for (const segment of segments) {
-		current = `${current}${segment}/`;
-		ancestors.add(current);
+		const folder = cursor.folders.get(segment);
+		if (folder) {
+			keys.add(folder.id);
+			cursor = folder;
+			continue;
+		}
+		// Segment matches a paired file whose companion folder absorbed the dir.
+		const paired = cursor.files.find((entry) => {
+			if (!entry.pairedFolder) return false;
+			const name = fileNameFromPath(entry.file.path);
+			const { name: stem } = splitFileName(name);
+			return stem === segment;
+		});
+		if (!paired || !paired.pairedFolder) return new Set();
+		keys.add(paired.file.path);
+		cursor = paired.pairedFolder;
 	}
-	return ancestors;
+	// If the target itself is a paired-file (unusual for reveal), nothing extra.
+	void targetPath;
+	return keys;
 }
 
 function readExpandedFolders(storageKey: string | null): Set<string> {

@@ -34,6 +34,7 @@ import {
 	relativeWorkspacePath,
 	replacePathPrefix,
 } from "../lib/filePath";
+import { copyText } from "../lib/clipboard";
 import {
 	indexMovedFiles,
 	type MovedFile,
@@ -42,6 +43,7 @@ import {
 	rewriteMovedLinks,
 } from "../lib/markdownLinkRewrite";
 import { isNewTabPath, isVirtualPath } from "../lib/newTabPage";
+import { pageLinkMarkup } from "../lib/pageLink";
 import {
 	captureScroll,
 	forgetScrollPositions,
@@ -1370,6 +1372,236 @@ export function createMarkdownFileInFolder(
 	tab?: TabTarget,
 ) {
 	return createEmptyFileInFolder(parentPath, "new-file", ".md", tab);
+}
+
+/**
+ * Create a new child page for `parentPath`, following the file-system
+ * subpages convention:
+ * - `A.md` with a sibling folder `A/` means the files in `A/` are A's children
+ * - the child is a normal `.md` file in `A/`; nesting is just deeper folders
+ *
+ * Ensures `A/` exists, picks a unique `Untitled.md` filename inside it, and
+ * writes the provided `markdown` (empty by default). Workspace lists are
+ * updated eagerly so the sidebar and the editor's wiki-target lookup see the
+ * file immediately. Returns the created absolute path and its
+ * workspace-relative wiki target, or null on failure.
+ */
+export async function createChildPage(
+	parentPath: string,
+	options?: { markdown?: string },
+): Promise<{ path: string; target: string } | null> {
+	const workspacePath = workspaceStore.get().workspacePath;
+	if (!workspacePath) return null;
+	if (!hasMarkdownExtension(parentPath)) return null;
+	const parentDir = dirname(parentPath);
+	if (!parentDir) return null;
+	const stem = fileStem(parentPath);
+	if (!stem) return null;
+	const siblingFolder = normalizePath(joinPath(parentDir, stem));
+
+	try {
+		// Idempotent folder create: main-side implementations accept an existing
+		// folder. Use pathExists to avoid triggering a benign error if we can.
+		if (!(await desktopApi.pathExists(siblingFolder))) {
+			await desktopApi.createFolder(siblingFolder);
+			workspaceStore.set((state) => {
+				if (state.folders.some((folder) => folder.path === siblingFolder)) {
+					return state;
+				}
+				return {
+					...state,
+					folders: [
+						...state.folders,
+						{ path: siblingFolder, modified_at: Math.floor(Date.now() / 1000) },
+					],
+				};
+			});
+		}
+		const childPath = uniqueFilePath(siblingFolder, "Untitled", ".md");
+		await desktopApi.writeFileText(childPath, options?.markdown ?? "");
+		const modified_at = Math.floor(Date.now() / 1000);
+		workspaceStore.set((state) => ({
+			...state,
+			files: [
+				...state.files,
+				{ path: childPath, modified_at, kind: fileKindForPath(childPath) },
+			],
+		}));
+		// The sidebar snapshot may lag the in-memory update briefly; a refresh
+		// also picks up any concurrent filesystem changes.
+		void refreshFileList();
+		return {
+			path: childPath,
+			target: relativeWorkspacePath(childPath, workspacePath),
+		};
+	} catch (err) {
+		const message = handleFileError(err);
+		toast.error("Failed to create child page", { description: message });
+		return null;
+	}
+}
+
+/**
+ * Promote a block into a new child page: reuses `createChildPage` to allocate
+ * the sibling file, but writes the provided markdown as its body instead of
+ * leaving it empty. The caller is responsible for replacing the source block
+ * with a `childPage` node pointing at `target`.
+ */
+export function turnBlockIntoChildPage(input: {
+	parentPath: string;
+	markdown: string;
+}): Promise<{ path: string; target: string } | null> {
+	return createChildPage(input.parentPath, { markdown: input.markdown });
+}
+
+/**
+ * Pick a workspace-unique duplicate name for `A.md`: `A copy.md`, then
+ * `A copy 2.md`, etc. When `requirePairedFolderFree` is true, also skip
+ * stems whose sibling folder is already taken so the paired `A copy/`
+ * folder can be created alongside the duplicated file.
+ */
+function uniqueDuplicateStem(
+	parent: string,
+	sourceStem: string,
+	extension: string,
+	requirePairedFolderFree: boolean,
+): string {
+	const { files, folders } = workspaceStore.get();
+	const fileSet = new Set(files.map((file) => file.path.toLocaleLowerCase()));
+	const folderSet = new Set(
+		folders.map((folder) => folder.path.toLocaleLowerCase()),
+	);
+	for (let index = 1; ; index++) {
+		const stem = index === 1 ? `${sourceStem} copy` : `${sourceStem} copy ${index}`;
+		const filePath = joinPath(parent, `${stem}${extension}`);
+		if (fileSet.has(filePath.toLocaleLowerCase())) continue;
+		if (requirePairedFolderFree) {
+			const folderPath = joinPath(parent, stem);
+			if (folderSet.has(folderPath.toLocaleLowerCase())) continue;
+		}
+		return stem;
+	}
+}
+
+async function copyFolderTree(fromPath: string, toPath: string): Promise<void> {
+	await desktopApi.createFolder(toPath);
+	const listing = await desktopApi.listDirectory(fromPath);
+	for (const file of listing.files) {
+		const name = basename(file.path);
+		const nextFilePath = joinPath(toPath, name);
+		const bytes = await desktopApi.readBinaryFile(file.path);
+		await desktopApi.writeBinaryFile(nextFilePath, bytes);
+	}
+	for (const folder of listing.folders) {
+		const name = basename(folder.path);
+		await copyFolderTree(folder.path, joinPath(toPath, name));
+	}
+}
+
+/**
+ * Duplicate a sidebar page: writes `A copy.md` next to `A.md`, and when `A/`
+ * exists, recursively copies it to `A copy/`. Clipboard-level: makes a fresh
+ * copy rather than hardlinking. Returns the new file path, or null on error.
+ */
+export async function duplicateSidebarItem(
+	path: string,
+): Promise<string | null> {
+	const workspacePath = workspaceStore.get().workspacePath;
+	if (!workspacePath) return null;
+	const parent = dirname(path);
+	if (!parent) return null;
+	const extension = extname(path);
+	const sourceStem = fileStem(path);
+	if (!sourceStem) return null;
+
+	const { folders } = workspaceStore.get();
+	const pairedFolder = hasMarkdownExtension(path)
+		? normalizePath(joinPath(parent, sourceStem))
+		: null;
+	const hasPairedFolder =
+		pairedFolder !== null &&
+		folders.some((folder) => pathEquals(folder.path, pairedFolder));
+
+	const duplicateStem = uniqueDuplicateStem(
+		parent,
+		sourceStem,
+		extension,
+		hasPairedFolder,
+	);
+	const nextFilePath = normalizePath(
+		joinPath(parent, `${duplicateStem}${extension}`),
+	);
+	const nextFolderPath =
+		hasPairedFolder && pairedFolder
+			? normalizePath(joinPath(parent, duplicateStem))
+			: null;
+
+	try {
+		let content = "";
+		try {
+			content = await desktopApi.readFileText(path);
+		} catch (err) {
+			if (!missingPathErrorPattern.test(errorMessage(err))) throw err;
+		}
+		await desktopApi.writeFileText(nextFilePath, content);
+		if (pairedFolder && nextFolderPath) {
+			await copyFolderTree(pairedFolder, nextFolderPath);
+		}
+		await refreshFileList();
+		return nextFilePath;
+	} catch (err) {
+		const message = handleFileError(err);
+		toast.error("Failed to duplicate", { description: message });
+		return null;
+	}
+}
+
+/**
+ * Copies a wiki-link markup for `path` to the clipboard: `[[relative/stem]]`,
+ * workspace-relative with forward slashes and no `.md` extension.
+ */
+export async function copyPageLink(path: string): Promise<void> {
+	const workspacePath = workspaceStore.get().workspacePath;
+	await copyText(pageLinkMarkup(path, workspacePath), "Page link");
+}
+
+/**
+ * Create a new empty .md file in the given folder using the provided stem.
+ * Does not load the file; returns the created absolute path (or null on error).
+ */
+export async function createMarkdownFileWithName(
+	parentPath: string,
+	name: string,
+): Promise<string | null> {
+	const stem = sanitizeFileStem(name);
+	if (!stem) return null;
+	const path = uniqueFilePath(parentPath, stem, ".md");
+	try {
+		await desktopApi.writeFileText(path, "");
+		const modified_at = Math.floor(Date.now() / 1000);
+		workspaceStore.set((state) => ({
+			...state,
+			files: [
+				...state.files,
+				{ path, modified_at, kind: fileKindForPath(path) },
+			],
+		}));
+		await refreshFileList();
+		return path;
+	} catch (err) {
+		const message = handleFileError(err);
+		toast.error("Failed to create file", { description: message });
+		return null;
+	}
+}
+
+function sanitizeFileStem(name: string): string {
+	// Strip path separators and reserved filesystem characters so the stem
+	// stays within the target folder.
+	return name
+		.replace(/[\\/:*?"<>|]/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 export function createHtmlFileInFolder(parentPath: string) {

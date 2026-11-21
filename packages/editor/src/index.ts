@@ -1,5 +1,12 @@
 export { ContextMenuSpellcheckExtension } from "./ContextMenuSpellcheckExtension.js";
 export {
+	CHILD_PAGE_CREATE_EVENT,
+	type ChildPageCreateDetail,
+	ChildPage,
+	TURN_INTO_PAGE_EVENT,
+	type TurnIntoPageDetail,
+} from "./ChildPage.js";
+export {
 	type AppCommandId,
 	type CommandBindings,
 	type CommandContext,
@@ -86,6 +93,14 @@ export {
 	RichTextClipboardExtension,
 } from "./RichTextClipboardExtension.js";
 export { StoredMarksDecorationExtension } from "./StoredMarksDecorationExtension.js";
+export {
+	buildWikiLinkValidTargetKeys,
+	isWikiTargetValid,
+	setWikiLinkValidTargetKeys,
+	wikiLinkValidityKey,
+	WikiLinkValidityExtension,
+	type WikiLinkValidityState,
+} from "./WikiLinkValidityExtension.js";
 export {
 	ToggleBlock,
 	ToggleContent,

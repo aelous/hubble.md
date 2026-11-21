@@ -62,6 +62,9 @@ function blockToPM(node: Content): JSONContent[] {
 				if (embed) return [embed];
 			}
 
+			const childPage = tryParseLoneChildPage(node.children ?? []);
+			if (childPage) return [childPage];
+
 			return [
 				{
 					type: "paragraph",
@@ -922,6 +925,29 @@ function extractImagesFromHast(hastTree: HastRoot): JSONContent[] {
 	visitHastNode(hastTree);
 	return images;
 }
+
+const LONE_WIKI_LINK_PATTERN = /^\[\[([^\]\n]+)\]\]$/;
+
+/**
+ * A paragraph whose only content is a single `[[target]]` wiki link (no
+ * surrounding text, no alias with display name) becomes a `childPage` node.
+ * Mixed paragraphs stay as wiki link marks.
+ */
+function tryParseLoneChildPage(children: Content[]): JSONContent | null {
+	if (children.length !== 1) return null;
+	const only = children[0];
+	if (only.type !== "text" || typeof only.value !== "string") return null;
+	const match = only.value.match(LONE_WIKI_LINK_PATTERN);
+	if (!match) return null;
+	const raw = match[1] ?? "";
+	// Aliased links (`[[path|name]]`) carry a display title the user cared
+	// about; keep them as inline wiki links.
+	if (raw.includes("|")) return null;
+	const target = raw.trim();
+	if (!target) return null;
+	return { type: "childPage", attrs: { href: target } };
+}
+
 
 const remarkInlineReferences: Plugin<[]> = () => {
 	return (tree) => {

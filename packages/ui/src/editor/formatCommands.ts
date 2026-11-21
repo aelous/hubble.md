@@ -1,4 +1,16 @@
+import {
+	TURN_INTO_PAGE_EVENT,
+	type TurnIntoPageDetail,
+	tiptapDocToMarkdown,
+} from "@hubble.md/editor";
 import type { Editor } from "@tiptap/core";
+
+/**
+ * Dispatched by the Cmd+/ format menu when the user picks "Copy page link".
+ * The desktop shell owns workspace paths, so it listens for this and copies
+ * `[[relative/path]]` for the currently-open file.
+ */
+export const COPY_PAGE_LINK_EVENT = "hubble:copy-page-link-requested";
 
 /**
  * The set of formatting actions Hubble exposes on top of its editor commands.
@@ -19,6 +31,8 @@ export type FormatCommandKind =
 	| "toggleHeading2"
 	| "toggleHeading3"
 	| "divider"
+	| "turnIntoPage"
+	| "copyPageLink"
 	| "bold"
 	| "italic"
 	| "strike"
@@ -67,6 +81,10 @@ export function isFormatActive(editor: Editor, kind: FormatCommandKind) {
 			return editor.isActive("strike");
 		case "link":
 			return editor.isActive("link");
+		case "turnIntoPage":
+			return false;
+		case "copyPageLink":
+			return false;
 		case "divider":
 			return false;
 	}
@@ -114,6 +132,12 @@ export function applyFormatCommand(editor: Editor, kind: FormatCommandKind) {
 			return;
 		case "divider":
 			chain.setHorizontalRule().run();
+			return;
+		case "turnIntoPage":
+			requestTurnIntoPage(editor);
+			return;
+		case "copyPageLink":
+			window.dispatchEvent(new CustomEvent(COPY_PAGE_LINK_EVENT));
 			return;
 		case "bold":
 			chain.toggleBold().run();
@@ -219,4 +243,32 @@ function convertCurrentBlockToToggle(
 			return true;
 		})
 		.run();
+}
+
+/**
+ * Serialize the enclosing top-level block to Markdown and dispatch a request
+ * for the host app to create a child page from it. Filesystem work is owned by
+ * the desktop shell; this helper only extracts content and forwards the block
+ * range. Only one block is promoted at a time: if the selection spans multiple
+ * top-level blocks, we still pick the one at the selection head so the command
+ * remains unambiguous. No-ops when the enclosing block is already a childPage.
+ */
+function requestTurnIntoPage(editor: Editor) {
+	const { state } = editor;
+	const { $from } = state.selection;
+	if ($from.depth < 1) return;
+	const blockStart = $from.before(1);
+	const blockEnd = $from.after(1);
+	const block = state.doc.nodeAt(blockStart);
+	if (!block) return;
+	if (block.type.name === "childPage") return;
+	const blockMarkdown = tiptapDocToMarkdown({
+		type: "doc",
+		content: [block.toJSON()],
+	});
+	window.dispatchEvent(
+		new CustomEvent<TurnIntoPageDetail>(TURN_INTO_PAGE_EVENT, {
+			detail: { blockStart, blockEnd, blockMarkdown },
+		}),
+	);
 }

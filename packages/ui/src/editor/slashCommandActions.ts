@@ -1,6 +1,14 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
+import {
+	CHILD_PAGE_CREATE_EVENT,
+	type ChildPageCreateDetail,
+} from "@hubble.md/editor";
+import {
+	AT_MENTION_REQUESTED_EVENT,
+	type AtMentionRequestedDetail,
+} from "./AtMentionExtension";
 
 export type SlashCommandKind =
 	| "paragraph"
@@ -17,7 +25,9 @@ export type SlashCommandKind =
 	| "toggleHeading3"
 	| "divider"
 	| "strike"
-	| "table";
+	| "table"
+	| "linkToPage"
+	| "childPage";
 
 export type SlashToken = {
 	from: number;
@@ -82,6 +92,42 @@ export function applySlashCommand(
 			.deleteRange(range)
 			.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
 			.run();
+		return;
+	}
+
+	if (kind === "linkToPage") {
+		// Delete the slash token, keep the empty paragraph, and open the picker
+		// anchored at the caret. The picker inserts a wiki link on confirm.
+		const tr = state.tr.delete(token.from, token.to);
+		const caret = tr.mapping.map(token.from);
+		tr.setSelection(TextSelection.create(tr.doc, caret));
+		view.dispatch(tr.scrollIntoView());
+		view.focus();
+		queueMicrotask(() => {
+			window.dispatchEvent(
+				new CustomEvent<AtMentionRequestedDetail>(AT_MENTION_REQUESTED_EVENT, {
+					detail: { pos: caret, insertPlain: true },
+				}),
+			);
+		});
+		return;
+	}
+
+	if (kind === "childPage") {
+		// Child page creation is file-system work; the editor can't do it on its
+		// own. Delete the slash token and emit an event with the containing
+		// block's bounds so the host app can create the file and swap in a
+		// `childPage` node.
+		const tr = state.tr.delete(token.from, token.to);
+		view.dispatch(tr.scrollIntoView());
+		view.focus();
+		queueMicrotask(() => {
+			window.dispatchEvent(
+				new CustomEvent<ChildPageCreateDetail>(CHILD_PAGE_CREATE_EVENT, {
+					detail: { blockStart, blockEnd },
+				}),
+			);
+		});
 		return;
 	}
 
@@ -213,6 +259,8 @@ function createEmptyBlock(
 			return horizontalRule.create();
 		case "strike":
 		case "table":
+		case "linkToPage":
+		case "childPage":
 			return null;
 	}
 }

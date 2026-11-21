@@ -73,6 +73,106 @@ describe("buildFileTree", () => {
 
 		expect(folderNames(tree)).toEqual([]);
 	});
+
+	it("absorbs a non-empty sibling folder into the paired .md file", () => {
+		const tree = buildFileTree(
+			[
+				{ path: "/workspace/A.md" },
+				{ path: "/workspace/A/child.md" },
+			],
+			[{ path: "/workspace/A" }],
+			getDisplayPath,
+		);
+
+		// The folder is hidden because its content nests under A.md.
+		expect(folderNames(tree)).toEqual([]);
+	});
+
+	it("keeps a .md paired with an empty folder as a plain file", () => {
+		const tree = buildFileTree(
+			[{ path: "/workspace/A.md" }],
+			[{ path: "/workspace/A" }],
+			getDisplayPath,
+		);
+
+		// Empty A/ still renders so the user can create inside it.
+		expect(folderNames(tree)).toEqual(["A"]);
+	});
+});
+
+describe("subpage pairing rows", () => {
+	it("renders A.md as a paired row and hides A/ when A/ has children", () => {
+		const files = [
+			{ path: "/workspace/A.md", modifiedAt: 1 },
+			{ path: "/workspace/A/child.md", modifiedAt: 2 },
+		];
+		const tree = buildFileTree(
+			files,
+			[{ path: "/workspace/A" }],
+			getDisplayPath,
+		);
+
+		const rows = flattenRows({
+			files,
+			getDisplayPath,
+			tree,
+			sortMode: "alpha",
+			expandedFolders: new Set(),
+		});
+
+		const kinds = rows.map((row) => row.kind);
+		expect(kinds).toEqual(["pairedFile"]);
+		const paired = rows[0];
+		if (paired.kind !== "pairedFile") throw new Error("expected pairedFile");
+		expect(paired.folderId).toBe("A/");
+		expect(paired.expanded).toBe(false);
+	});
+
+	it("expands a paired row via the file path key and nests folder children", () => {
+		const files = [
+			{ path: "/workspace/A.md", modifiedAt: 1 },
+			{ path: "/workspace/A/child.md", modifiedAt: 2 },
+		];
+		const tree = buildFileTree(
+			files,
+			[{ path: "/workspace/A" }],
+			getDisplayPath,
+		);
+
+		const rows = flattenRows({
+			files,
+			getDisplayPath,
+			tree,
+			sortMode: "alpha",
+			expandedFolders: new Set(["/workspace/A.md"]),
+		});
+
+		expect(rows.map((row) => row.kind)).toEqual(["pairedFile", "file"]);
+		expect(filePaths(rows)).toEqual([
+			"/workspace/A.md",
+			"/workspace/A/child.md",
+		]);
+	});
+
+	it("degrades A.md to a plain file row when A/ is empty", () => {
+		const files = [{ path: "/workspace/A.md", modifiedAt: 1 }];
+		const tree = buildFileTree(
+			files,
+			[{ path: "/workspace/A" }],
+			getDisplayPath,
+		);
+
+		const rows = flattenRows({
+			files,
+			getDisplayPath,
+			tree,
+			sortMode: "alpha",
+			expandedFolders: new Set(),
+		});
+
+		// Empty A/ renders as a normal folder row; A.md is a plain file row.
+		expect(rows.map((row) => row.kind)).toEqual(["folder", "file"]);
+	});
 });
 
 describe("flattenRows", () => {
@@ -338,11 +438,15 @@ function renderTree(overrides: Partial<TreeProps>) {
 }
 
 function filePaths(rows: SidebarRow[]) {
-	return rows.flatMap((row) => (row.kind === "file" ? [row.file.path] : []));
+	return rows.flatMap((row) =>
+		row.kind === "file" || row.kind === "pairedFile" ? [row.file.path] : [],
+	);
 }
 
 function fileLabels(rows: SidebarRow[]) {
-	return rows.flatMap((row) => (row.kind === "file" ? [row.label] : []));
+	return rows.flatMap((row) =>
+		row.kind === "file" || row.kind === "pairedFile" ? [row.label] : [],
+	);
 }
 
 function folderLabels(rows: SidebarRow[], depth: number) {

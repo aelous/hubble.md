@@ -32,10 +32,12 @@ import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascendin
 import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteCodeLine from "~icons/mingcute/code-line";
 import MingcuteCopy2Line from "~icons/mingcute/copy-2-line";
+import MingcuteCopy3Line from "~icons/mingcute/copy-3-line";
 import MingcuteDeleteLine from "~icons/mingcute/delete-line";
 import MingcuteEditLine from "~icons/mingcute/edit-line";
 import MingcuteExternalLinkLine from "~icons/mingcute/external-link-line";
 import MingcuteFolderOpenLine from "~icons/mingcute/folder-open-line";
+import MingcuteLink2Line from "~icons/mingcute/link-2-line";
 import MingcuteMore2Line from "~icons/mingcute/more-2-line";
 import MingcuteNewFolderLine from "~icons/mingcute/new-folder-line";
 import MingcutePinFill from "~icons/mingcute/pin-fill";
@@ -97,7 +99,10 @@ type RenameItem =
 			parentDisplayPath: string;
 	  };
 
-type SidebarSelectableRow = Extract<SidebarRow, { kind: "file" | "folder" }>;
+type SidebarSelectableRow = Extract<
+	SidebarRow,
+	{ kind: "file" | "folder" | "pairedFile" }
+>;
 export type SidebarActionSelection = {
 	files: SidebarFile[];
 	folders: string[];
@@ -149,9 +154,9 @@ function sidebarFileKey(path: string) {
 
 export function sidebarRowKey(row: SidebarRow): string | null {
 	if (row.kind === "section") return null;
-	return row.kind === "file"
-		? sidebarFileKey(row.file.path)
-		: `folder:${row.id}`;
+	return row.kind === "folder"
+		? `folder:${row.id}`
+		: sidebarFileKey(row.file.path);
 }
 
 export function sidebarFocusTarget({
@@ -171,9 +176,9 @@ export function sidebarFocusTarget({
 		});
 	}
 	if (!row || row.kind === "section") return null;
-	return row.kind === "file"
-		? { kind: "file" as const, path: row.file.path }
-		: { kind: "folder" as const, folderId: row.id };
+	return row.kind === "folder"
+		? { kind: "folder" as const, folderId: row.id }
+		: { kind: "file" as const, path: row.file.path };
 }
 
 export function sidebarCreationFolderId(input: {
@@ -276,22 +281,23 @@ export function sidebarMoveCandidateFromRow(
 ): SidebarMoveCandidate | null {
 	const key = sidebarRowKey(row);
 	if (!key || row.kind === "section") return null;
-	return row.kind === "file"
-		? {
-				kind: "file",
-				path: row.file.path,
-				key,
-				// folderIds live in the display-path namespace, but file rows
-				// carry an absolute disk path, so map it back to a display path
-				// before deriving the parent folderId.
-				parentFolderId: folderIdFromDisplayPath(getDisplayPath(row.file.path)),
-			}
-		: {
-				kind: "folder",
-				folderId: row.id,
-				key,
-				parentFolderId: parentFolderId(row.id),
-			};
+	if (row.kind === "folder") {
+		return {
+			kind: "folder",
+			folderId: row.id,
+			key,
+			parentFolderId: parentFolderId(row.id),
+		};
+	}
+	return {
+		kind: "file",
+		path: row.file.path,
+		key,
+		// folderIds live in the display-path namespace, but file rows
+		// carry an absolute disk path, so map it back to a display path
+		// before deriving the parent folderId.
+		parentFolderId: folderIdFromDisplayPath(getDisplayPath(row.file.path)),
+	};
 }
 
 function sidebarMoveItemFromCandidate(
@@ -425,6 +431,7 @@ export function Sidebar({
 	onOpenFileInDefaultApp,
 	onRevealFile,
 	onCopyFilePath,
+	onCopyPageLink,
 	onRevealFolder,
 	onCopyFolderPath,
 	onFocusedItemChange,
@@ -433,6 +440,7 @@ export function Sidebar({
 	onRenameFolder,
 	onDeleteFile,
 	onDeleteItems,
+	onDuplicateFile,
 	onTogglePinnedFile,
 	onCreateFile,
 	onCreateHtmlFile,
@@ -463,6 +471,7 @@ export function Sidebar({
 	onOpenFileInDefaultApp?: (path: string) => void;
 	onRevealFile?: (path: string) => void;
 	onCopyFilePath?: (path: string) => void;
+	onCopyPageLink?: (path: string) => void;
 	onRevealFolder?: (folderId: string) => void;
 	onCopyFolderPath?: (folderId: string) => void;
 	onFocusedItemChange?: (item: SidebarFocusedItem) => void;
@@ -482,6 +491,7 @@ export function Sidebar({
 	) => void;
 	onDeleteFile?: (path: string) => void;
 	onDeleteItems?: (items: SidebarDeleteItem[]) => void;
+	onDuplicateFile?: (path: string) => void;
 	onTogglePinnedFile?: (path: string) => void;
 	onCreateFile?: (folderId: string | null) => Promise<string | null>;
 	onCreateHtmlFile?: (folderId: string | null) => Promise<string | null>;
@@ -604,6 +614,7 @@ export function Sidebar({
 	};
 	const activateRow = (row: SidebarRow) => {
 		if (row.kind === "file") onSelectFile(row.file.path);
+		else if (row.kind === "pairedFile") onSelectFile(row.file.path);
 		else if (row.kind === "folder") toggleFolder(row.id);
 	};
 	const updateSelection = (row: SidebarRow, mode: SidebarSelectionMode) => {
@@ -625,24 +636,36 @@ export function Sidebar({
 		row: SidebarSelectableRow,
 		event: React.MouseEvent<HTMLButtonElement>,
 	) => {
-		const clickMode = sidebarRowClickMode(event, row.kind);
+		const clickKind = row.kind === "folder" ? "folder" : "file";
+		const clickMode = sidebarRowClickMode(event, clickKind);
 		if (clickMode === "range") {
 			updateSelection(row, "range");
 			event.preventDefault();
 			return;
 		}
-		if (clickMode === "new-tab" && onOpenFileInNewTab && row.kind === "file") {
+		if (
+			clickMode === "new-tab" &&
+			onOpenFileInNewTab &&
+			(row.kind === "file" || row.kind === "pairedFile")
+		) {
 			event.preventDefault();
 			onOpenFileInNewTab(row.file.path, { background: true });
 			return;
 		}
 		updateSelection(row, "replace");
-		if (row.kind === "file" && event.detail > 1) return;
+		if (
+			(row.kind === "file" || row.kind === "pairedFile") &&
+			event.detail > 1
+		)
+			return;
 		activateRow(row);
 		requestAnimationFrame(() => navRef.current?.focus());
 	};
 	const enterRowEdit = (row: SidebarRow) => {
-		if (row.kind === "file" && onRenameFile)
+		if (
+			(row.kind === "file" || row.kind === "pairedFile") &&
+			onRenameFile
+		)
 			beginRename({ kind: "file", path: row.file.path }, row.label);
 		else if (row.kind === "folder" && onRenameFolder)
 			beginRename(
@@ -659,12 +682,16 @@ export function Sidebar({
 	};
 	const expandRow = (row: SidebarRow) => {
 		if (row.kind === "folder") expandFolder(row.id);
+		else if (row.kind === "pairedFile") expandFolder(row.file.path);
 	};
 	const collapseRow = (row: SidebarRow) => {
 		if (row.kind === "folder") collapseFolder(row.id);
+		else if (row.kind === "pairedFile") collapseFolder(row.file.path);
 	};
 	const activeIndex = rows.findIndex(
-		(row) => row.kind === "file" && row.file.path === highlightPath,
+		(row) =>
+			(row.kind === "file" || row.kind === "pairedFile") &&
+			row.file.path === highlightPath,
 	);
 	const activeItem = activeIndex >= 0 ? rows[activeIndex] : null;
 	const activeItemRef = useRef(activeItem);
@@ -841,17 +868,30 @@ export function Sidebar({
 
 	useEffect(() => {
 		if (!activeDragLabel || !dropTarget?.folderId) return;
+		const folderId = dropTarget.folderId;
 		const targetRow = rows.find(
-			(row): row is Extract<SidebarRow, { kind: "folder" }> =>
-				row.kind === "folder" &&
-				!row.expanded &&
-				(row.id === dropTarget.folderId ||
-					row.segments.some((segment) => segment.id === dropTarget.folderId)),
+			(
+				row,
+			): row is Extract<SidebarRow, { kind: "folder" | "pairedFile" }> => {
+				if (row.kind === "folder") {
+					return (
+						!row.expanded &&
+						(row.id === folderId ||
+							row.segments.some((segment) => segment.id === folderId))
+					);
+				}
+				if (row.kind === "pairedFile") {
+					return !row.expanded && row.folderId === folderId;
+				}
+				return false;
+			},
 		);
 		if (!targetRow) return;
+		const expandKey =
+			targetRow.kind === "folder" ? targetRow.id : targetRow.file.path;
 		// Let users hover a collapsed folder while dragging to reveal nested targets.
 		const timer = window.setTimeout(() => {
-			expandFolder(targetRow.id);
+			expandFolder(expandKey);
 		}, DRAG_EXPAND_DELAY_MS);
 		return () => window.clearTimeout(timer);
 	}, [activeDragLabel, dropTarget, expandFolder, rows]);
@@ -985,7 +1025,9 @@ export function Sidebar({
 				{rows.length === 0 && emptyState}
 				{rows.map((row, index) => {
 					const isFocused = focusedIndex === index;
-					const isOpen = row.kind === "file" && row.file.path === highlightPath;
+					const isFileRow =
+						row.kind === "file" || row.kind === "pairedFile";
+					const isOpen = isFileRow && row.file.path === highlightPath;
 					const rowKey = sidebarRowKey(row);
 					const isSelected = rowKey ? selectedKeys.has(rowKey) : false;
 					const actionSelection =
@@ -996,7 +1038,7 @@ export function Sidebar({
 									rowKey ? new Set([rowKey]) : new Set(),
 								);
 					const isRenaming =
-						(row.kind === "file" &&
+						(isFileRow &&
 							renamingItem?.kind === "file" &&
 							row.file.path === renamingItem.path) ||
 						(row.kind === "folder" &&
@@ -1022,13 +1064,17 @@ export function Sidebar({
 					const rowStyle = {
 						paddingInlineStart: `${0.5 + row.depth * 0.75}rem`,
 					} as React.CSSProperties;
+					const rowExpanded =
+						row.kind === "folder" || row.kind === "pairedFile"
+							? row.expanded
+							: false;
 					const chevron = (
 						<span className="inline-flex size-3 shrink-0 items-center justify-center text-muted-foreground">
-							{row.kind === "folder" && (
+							{(row.kind === "folder" || row.kind === "pairedFile") && (
 								<MingcuteRightLine
 									className={cn(
 										"size-3 transition-transform duration-150 ease-out",
-										row.expanded && "rotate-90",
+										rowExpanded && "rotate-90",
 									)}
 								/>
 							)}
@@ -1060,7 +1106,9 @@ export function Sidebar({
 									tabIndex={-1}
 									data-sidebar-index={index}
 									aria-expanded={
-										row.kind === "folder" ? row.expanded : undefined
+										row.kind === "folder" || row.kind === "pairedFile"
+											? row.expanded
+											: undefined
 									}
 									aria-current={isOpen ? "page" : undefined}
 									aria-selected={isSelected}
@@ -1103,12 +1151,14 @@ export function Sidebar({
 									)}
 									onContextMenu={(event) => {
 										if (
-											row.kind === "file" &&
+											isFileRow &&
 											!onRevealFile &&
 											!onOpenFileInNewTab &&
 											!onOpenFileInDefaultApp &&
 											!onCopyFilePath &&
+											!onCopyPageLink &&
 											!onRenameFile &&
+											!onDuplicateFile &&
 											!onDeleteItems &&
 											!onDeleteFile
 										)
@@ -1128,7 +1178,7 @@ export function Sidebar({
 										focusItem(row);
 										if (!isSelected) replaceSelection(row);
 										setOpenActionsPath(
-											row.kind === "file" ? row.file.path : row.id,
+											isFileRow ? row.file.path : row.id,
 										);
 									}}
 									title={row.label}
@@ -1146,7 +1196,7 @@ export function Sidebar({
 												onChange={(value) => {
 													setRenameDraft(value);
 													setRenameError(
-														row.kind === "file"
+														isFileRow
 															? getRenameError(
 																	{ kind: "file", path: row.file.path },
 																	value,
@@ -1182,7 +1232,7 @@ export function Sidebar({
 												handleRowClick(row, event);
 											}}
 											onDoubleClick={(event) => {
-												if (row.kind !== "file" || !onRenameFile) return;
+												if (!isFileRow || !onRenameFile) return;
 												event.preventDefault();
 												beginRename(
 													{ kind: "file", path: row.file.path },
@@ -1284,12 +1334,14 @@ export function Sidebar({
 												<MingcutePinFill className="size-3.5" />
 											</button>
 										)}
-										{row.kind === "file" &&
+										{isFileRow &&
 											(onOpenFileInNewTab ||
 												onRevealFile ||
 												onOpenFileInDefaultApp ||
 												onCopyFilePath ||
+												onCopyPageLink ||
 												onRenameFile ||
+												onDuplicateFile ||
 												onDeleteItems ||
 												onDeleteFile ||
 												onTogglePinnedFile) && (
@@ -1304,6 +1356,7 @@ export function Sidebar({
 													onOpenFileInNewTab={onOpenFileInNewTab}
 													onOpenFileInDefaultApp={onOpenFileInDefaultApp}
 													onCopyFilePath={onCopyFilePath}
+													onCopyPageLink={onCopyPageLink}
 													revealLabel={revealLabel}
 													onRenameFile={(file, label) =>
 														beginRename(
@@ -1311,6 +1364,7 @@ export function Sidebar({
 															label,
 														)
 													}
+													onDuplicateFile={onDuplicateFile}
 													onTogglePinnedFile={onTogglePinnedFile}
 													onDeleteFile={onDeleteFile}
 													onDeleteSelection={handleDeleteSelection}
@@ -1471,7 +1525,7 @@ function DraggableSidebarRow({
 	children: (props: DragRenderProps) => ReactNode;
 	enabled: boolean;
 	getDisplayPath: (path: string) => string;
-	row: Extract<SidebarRow, { kind: "file" | "folder" }>;
+	row: Extract<SidebarRow, { kind: "file" | "folder" | "pairedFile" }>;
 }) {
 	const candidate = sidebarMoveCandidateFromRow(
 		row,
@@ -1479,7 +1533,7 @@ function DraggableSidebarRow({
 	) as SidebarMoveCandidate;
 	const data = { ...candidate, label: row.label } satisfies DragItemData;
 	const draggable = useDraggable({
-		id: `sidebar-drag:${row.kind}:${row.kind === "file" ? row.file.path : row.id}`,
+		id: `sidebar-drag:${row.kind}:${row.kind === "folder" ? row.id : row.file.path}`,
 		data,
 		disabled: !enabled,
 	});
@@ -1548,15 +1602,20 @@ function DroppableRowButton({
 	getDisplayPath: (path: string) => string;
 	onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
 	onDoubleClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
-	row: Extract<SidebarRow, { kind: "file" | "folder" }>;
+	row: Extract<SidebarRow, { kind: "file" | "folder" | "pairedFile" }>;
 	style: React.CSSProperties;
 }) {
+	// Paired files route drops into their companion folder so dragging onto
+	// A.md lands items inside A/, matching how A/ would behave if visible.
 	const folderId =
 		row.kind === "folder"
 			? row.id
-			: folderIdFromDisplayPath(getDisplayPath(row.file.path));
+			: row.kind === "pairedFile"
+				? row.folderId
+				: folderIdFromDisplayPath(getDisplayPath(row.file.path));
+	const dropRowId = row.kind === "folder" ? row.id : row.file.path;
 	const { setNodeRef } = useDroppable({
-		id: `sidebar-drop:row:${row.kind === "folder" ? row.id : row.file.path}`,
+		id: `sidebar-drop:row:${dropRowId}`,
 		data: { folderId } satisfies DropTargetData,
 		disabled: !enabled,
 	});
@@ -1748,7 +1807,7 @@ function sidebarActionSelection(
 	for (const row of rows) {
 		const key = sidebarRowKey(row);
 		if (!key || !selectedKeys.has(key)) continue;
-		if (row.kind === "file") files.push(row.file);
+		if (row.kind === "file" || row.kind === "pairedFile") files.push(row.file);
 		else if (row.kind === "folder") folders.push(row.id);
 	}
 	return { files, folders, count: files.length + folders.length };
@@ -1796,16 +1855,24 @@ function nextSidebarItem(rows: SidebarRow[], index: number) {
 }
 
 function rowInFolderDropTarget(
-	row: Extract<SidebarRow, { kind: "file" | "folder" }>,
+	row: Extract<SidebarRow, { kind: "file" | "folder" | "pairedFile" }>,
 	folderId: string | null,
 	getDisplayPath: (path: string) => string,
 ) {
 	if (folderId === null) return true;
-	if (row.kind === "file") {
+	if (row.kind === "folder") {
+		return row.id === folderId || row.id.startsWith(folderId);
+	}
+	if (row.kind === "pairedFile") {
+		// Paired files drop onto their companion folder, so they highlight when
+		// that folder (or an ancestor) is the current drop target.
+		if (row.folderId === folderId || row.folderId.startsWith(folderId))
+			return true;
 		const parent = folderIdFromDisplayPath(getDisplayPath(row.file.path));
 		return parent === folderId || Boolean(parent?.startsWith(folderId));
 	}
-	return row.id === folderId || row.id.startsWith(folderId);
+	const parent = folderIdFromDisplayPath(getDisplayPath(row.file.path));
+	return parent === folderId || Boolean(parent?.startsWith(folderId));
 }
 
 function isInvalidMove(
@@ -2138,8 +2205,10 @@ function FileActionsMenu({
 	onOpenFileInNewTab,
 	onOpenFileInDefaultApp,
 	onCopyFilePath,
+	onCopyPageLink,
 	revealLabel,
 	onRenameFile,
+	onDuplicateFile,
 	onTogglePinnedFile,
 	onDeleteFile,
 	onDeleteFolders,
@@ -2158,8 +2227,10 @@ function FileActionsMenu({
 	) => void;
 	onOpenFileInDefaultApp?: (path: string) => void;
 	onCopyFilePath?: (path: string) => void;
+	onCopyPageLink?: (path: string) => void;
 	revealLabel?: string;
 	onRenameFile?: (file: SidebarFile, label: string) => void;
+	onDuplicateFile?: (path: string) => void;
 	onTogglePinnedFile?: (path: string) => void;
 	onDeleteFile?: (path: string) => void;
 	onDeleteFolders?: (id: string) => void;
@@ -2192,8 +2263,10 @@ function FileActionsMenu({
 				onOpenFileInNewTab={onOpenFileInNewTab}
 				onOpenFileInDefaultApp={onOpenFileInDefaultApp}
 				onCopyFilePath={onCopyFilePath}
+				onCopyPageLink={onCopyPageLink}
 				revealLabel={revealLabel}
 				onRenameFile={onRenameFile}
+				onDuplicateFile={onDuplicateFile}
 				onTogglePinnedFile={onTogglePinnedFile}
 				onDeleteFile={onDeleteFile}
 				onDeleteSelection={onDeleteSelection}
@@ -2210,8 +2283,10 @@ type FileActionHandlers = {
 	) => void;
 	onOpenFileInDefaultApp?: (path: string) => void;
 	onCopyFilePath?: (path: string) => void;
+	onCopyPageLink?: (path: string) => void;
 	revealLabel?: string;
 	onRenameFile?: (file: SidebarFile, label: string) => void;
+	onDuplicateFile?: (path: string) => void;
 	onTogglePinnedFile?: (path: string) => void;
 	onDeleteFile?: (path: string) => void;
 	onDeleteSelection?: (selection: SidebarActionSelection) => void;
@@ -2225,8 +2300,10 @@ function FileActionItems({
 	onOpenFileInNewTab,
 	onOpenFileInDefaultApp,
 	onCopyFilePath,
+	onCopyPageLink,
 	revealLabel,
 	onRenameFile,
+	onDuplicateFile,
 	onTogglePinnedFile,
 	onDeleteFile,
 	onDeleteSelection,
@@ -2270,12 +2347,28 @@ function FileActionItems({
 					Copy file path
 				</ActionItem>
 			)}
+			{onCopyPageLink && (
+				<ActionItem
+					icon={<MingcuteLink2Line />}
+					onClick={() => onCopyPageLink(file.path)}
+				>
+					Copy link
+				</ActionItem>
+			)}
 			{onRenameFile && (
 				<ActionItem
 					icon={<MingcuteEditLine />}
 					onClick={() => onRenameFile(file, label)}
 				>
 					Rename
+				</ActionItem>
+			)}
+			{onDuplicateFile && (
+				<ActionItem
+					icon={<MingcuteCopy3Line />}
+					onClick={() => onDuplicateFile(file.path)}
+				>
+					Duplicate
 				</ActionItem>
 			)}
 			{onTogglePinnedFile && (
