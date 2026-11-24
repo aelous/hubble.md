@@ -7,13 +7,22 @@ type LinkPayload = {
 	href: string;
 	kind: LinkKind;
 	target: string | null;
+	invalid: boolean;
 };
+
+function isInvalidClickTarget(target: EventTarget | null): boolean {
+	if (!(target instanceof Element)) return false;
+	return Boolean(
+		target.closest("[data-link-invalid], [data-child-page-missing='true']"),
+	);
+}
 
 function findLinkAtEvent(
 	view: EditorView,
 	event: MouseEvent,
 ): LinkPayload | null {
 	const state = view.state;
+	const invalid = isInvalidClickTarget(event.target);
 	const posData = view.posAtCoords({ left: event.clientX, top: event.clientY });
 	if (!posData) return null;
 	const $pos = state.doc.resolve(posData.pos);
@@ -24,8 +33,21 @@ function findLinkAtEvent(
 				kind: mark.attrs.kind === "wiki" ? "wiki" : "url",
 				target:
 					typeof mark.attrs.target === "string" ? mark.attrs.target : null,
+				invalid,
 			};
 		}
+	}
+	// Atom nodes (e.g. childPage) carry no link mark; the node view instead
+	// renders a `<span data-href data-link-kind>` so this handler and
+	// LinkPopover share a single click path.
+	const target = event.target instanceof Element ? event.target : null;
+	const anchor = target?.closest<HTMLElement>("[data-href][data-link-kind]");
+	if (anchor) {
+		const href = anchor.getAttribute("data-href") ?? "";
+		const kind =
+			anchor.getAttribute("data-link-kind") === "wiki" ? "wiki" : "url";
+		const linkTarget = anchor.getAttribute("data-target");
+		return { href, kind, target: linkTarget, invalid };
 	}
 	return null;
 }
@@ -57,6 +79,9 @@ export const LinkClickExtension = Extension.create<{
 		window.addEventListener("blur", onBlur);
 
 		const openLink = (link: LinkPayload) => {
+			// LK-09: an invalid wiki link / childPage with a missing target is
+			// a no-op on click — no error toast, no navigation.
+			if (link.invalid && link.kind === "wiki") return;
 			if (link.kind === "wiki") {
 				void this.options.onOpenWikiLink?.(link.target ?? link.href);
 				return;

@@ -62,6 +62,9 @@ function blockToPM(node: Content): JSONContent[] {
 				if (embed) return [embed];
 			}
 
+			const childPage = tryParseLoneChildPage(node.children ?? []);
+			if (childPage) return [childPage];
+
 			return [
 				{
 					type: "paragraph",
@@ -77,7 +80,33 @@ function blockToPM(node: Content): JSONContent[] {
 					content: inlineToPM(node.children ?? []),
 				},
 			];
-		case "blockquote":
+		case "blockquote": {
+			// Obsidian foldable callout:
+			//   > [!note]- Summary text
+			//   > body...
+			// (`-` after the type name means default-collapsed, `+` default-open.)
+			const callout = tryParseCallout(node);
+			if (callout) {
+				return [
+					{
+						type: "toggleBlock",
+						attrs: { open: callout.open, level: callout.level },
+						content: [
+							{
+								type: "toggleSummary",
+								content: callout.summary,
+							},
+							{
+								type: "toggleContent",
+								content:
+									callout.body.length > 0
+										? callout.body.flatMap((n) => blockToPM(n as Content))
+										: [{ type: "paragraph" }],
+							},
+						],
+					},
+				];
+			}
 			return [
 				{
 					type: "blockquote",
@@ -86,6 +115,7 @@ function blockToPM(node: Content): JSONContent[] {
 					),
 				},
 			];
+		}
 		case "code":
 			return [
 				{
@@ -896,6 +926,28 @@ function extractImagesFromHast(hastTree: HastRoot): JSONContent[] {
 	return images;
 }
 
+const LONE_WIKI_LINK_PATTERN = /^\[\[([^\]\n]+)\]\]$/;
+
+/**
+ * A paragraph whose only content is a single `[[target]]` wiki link (no
+ * surrounding text, no alias with display name) becomes a `childPage` node.
+ * Mixed paragraphs stay as wiki link marks.
+ */
+function tryParseLoneChildPage(children: Content[]): JSONContent | null {
+	if (children.length !== 1) return null;
+	const only = children[0];
+	if (only.type !== "text" || typeof only.value !== "string") return null;
+	const match = only.value.match(LONE_WIKI_LINK_PATTERN);
+	if (!match) return null;
+	const raw = match[1] ?? "";
+	// Aliased links (`[[path|name]]`) carry a display title the user cared
+	// about; keep them as inline wiki links.
+	if (raw.includes("|")) return null;
+	const target = raw.trim();
+	if (!target) return null;
+	return { type: "childPage", attrs: { href: target } };
+}
+
 const remarkInlineReferences: Plugin<[]> = () => {
 	return (tree) => {
 		const definitions = new Map<string, Definition>();
@@ -954,3 +1006,50 @@ const remarkRemoveEmptyMarkers: Plugin<[]> = () => {
 		});
 	};
 };
+
+type Callout = {
+	open: boolean;
+	level: 0 | 1 | 2 | 3;
+	summary: JSONContent[];
+	body: Content[];
+};
+
+const CALLOUT_HEAD = /^\[![^\]]+\]([-+])?\s*/;
+const CALLOUT_LEVEL = /^(#{1,3})\s+/;
+
+/**
+ * Detect an Obsidian-style foldable callout and split it into header and body.
+ * Non-foldable callouts (no `-`/`+` flag) stay as plain blockquotes.
+ */
+function tryParseCallout(blockquote: { children?: Content[] }): Callout | null {
+	const children = blockquote.children ?? [];
+	const first = children[0];
+	if (!first || first.type !== "paragraph") return null;
+	const firstChild = first.children?.[0];
+	if (!firstChild || firstChild.type !== "text") return null;
+	const match = firstChild.value.match(CALLOUT_HEAD);
+	if (!match) return null;
+	const flag = match[1];
+	if (flag !== "-" && flag !== "+") return null;
+	const open = flag === "+";
+	// Peel the `[!type]-/+ ` prefix. If the remaining summary begins with
+	// `# `..`### `, treat it as a Toggle-heading and keep the rest as summary.
+	let remaining = firstChild.value.slice(match[0].length);
+	let level: 0 | 1 | 2 | 3 = 0;
+	const levelMatch = remaining.match(CALLOUT_LEVEL);
+	if (levelMatch) {
+		level = levelMatch[1].length as 1 | 2 | 3;
+		remaining = remaining.slice(levelMatch[0].length);
+	}
+	const stripped: Paragraph = {
+		type: "paragraph",
+		children: [{ ...firstChild, value: remaining }, ...first.children.slice(1)],
+	};
+	const summary = inlineToPM(stripped.children);
+	return {
+		open,
+		level,
+		summary,
+		body: children.slice(1),
+	};
+}

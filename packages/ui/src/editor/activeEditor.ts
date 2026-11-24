@@ -29,6 +29,16 @@ const EDITOR_ACTIONS = {
 	"ordered-list": (chain) => chain.toggleParentOrderedList(),
 	"task-list": (chain) => chain.toggleParentTaskList(),
 	blockquote: (chain) => chain.toggleBlockquote(),
+	"insert-date": (chain) => {
+		const d = new Date();
+		const yyyy = d.getFullYear();
+		const mm = String(d.getMonth() + 1).padStart(2, "0");
+		const dd = String(d.getDate()).padStart(2, "0");
+		const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+			d.getDay()
+		];
+		return chain.insertContent(`${yyyy}-${mm}-${dd} ${week}`);
+	},
 } satisfies Record<
 	string,
 	(chain: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>

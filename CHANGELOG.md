@@ -10,10 +10,23 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 ### Added
 
 - Install the Hubble agent skills from inside Hubble, and they stay up to date as Hubble updates, including copies you installed with `npx skills`. [#337](https://github.com/bholmesdev/hubble.md/pull/337)
+- Create sub-pages inside a note with `/page`, and link between notes with `[[` wiki links.
+- See which notes link to the current one in a backlinks panel, and follow the breadcrumb back up to parent notes.
+- Hover a wiki link to preview the note it points to.
+- Collapse sections with toggle blocks, and jump around long notes from the outline panel.
+- Insert the current date with the `/date` command.
 
 ### Changed
 
+- Renaming or moving a note updates the wiki links that point to it.
+
 ### Fixed
+
+- Fixed the wiki link picker, and links no longer pop up a link editor after you insert them.
+
+## [0.3.4] - 2026-11-01
+
+### Changed
 
 ## [0.3.4] - 2026-11-01
 

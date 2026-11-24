@@ -1,12 +1,15 @@
 import {
 	absoluteWorkspacePath,
 	dirname,
+	hasMarkdownExtension,
 	joinPath,
 	normalizePath,
 	pathInFolder,
 	relativeWorkspacePath,
 	replacePathPrefix,
+	withMarkdownExtension,
 } from "./filePath";
+import { rewriteWikiLinksInContent } from "./linkRewrite";
 
 export type MovedFile = {
 	fromPath: string;
@@ -215,23 +218,81 @@ function rewriteLinksToMovedTargets(
 	);
 }
 
-/** Rewrites wiki links because their destinations are workspace-relative. */
+/** Workspace-relative path with `.md` stripped, lower-cased for comparison. */
+function wikiTargetKey(absolutePath: string, workspacePath: string) {
+	const relative = relativeWorkspacePath(
+		normalizePath(absolutePath),
+		workspacePath,
+	);
+	const stripped = relative.replace(/\.(md|markdown|mdown)$/i, "");
+	return stripped.toLocaleLowerCase();
+}
+
+/** Last path segment of a workspace-relative path, with the extension removed. */
+function stemFromRelative(relativePath: string) {
+	const last = relativePath.split("/").pop() ?? relativePath;
+	return last.replace(/\.(md|markdown|mdown)$/i, "");
+}
+
+/**
+ * Rewrites wiki links whose target points at one of the moved Markdown files.
+ *
+ * Handles both workspace-relative forms (`[[folder/Foo]]`, `[[folder/Foo.md]]`)
+ * and the stem shorthand (`[[Foo]]`). Hash fragments (`#heading`) and aliases
+ * (`|display`) are preserved verbatim. Implements PRD CR-A: renames propagate
+ * to every reference across the workspace.
+ */
 function rewriteWikiLinks(
 	content: string,
 	workspacePath: string,
 	movedByOldPath: MovedFileIndex,
 ) {
-	return content.replace(
-		/\[\[([^\]\n|]+)(\|[^\]\n]+)?\]\]/g,
-		(match, target, title = "") => {
-			const fromPath = absoluteWorkspacePath(target, workspacePath);
-			const movedTarget = movedByOldPath.get(
-				normalizePath(fromPath).toLocaleLowerCase(),
-			);
-			if (!movedTarget) return match;
-			return `[[${relativeWorkspacePath(movedTarget.toPath, workspacePath)}${title}]]`;
-		},
-	);
+	type Entry = { newTarget: string; stem: string };
+	const byRelativeKey = new Map<string, Entry>();
+	// Stem shortcuts (`[[Foo]]`) are only safe when unambiguous; collisions
+	// disable rewriting for that stem.
+	const byStem = new Map<string, Entry | null>();
+	for (const moved of movedByOldPath.values()) {
+		if (!hasMarkdownExtension(moved.fromPath)) continue;
+		const fromKey = wikiTargetKey(moved.fromPath, workspacePath);
+		const newRelative = relativeWorkspacePath(
+			normalizePath(moved.toPath),
+			workspacePath,
+		);
+		const newTarget = newRelative.replace(/\.(md|markdown|mdown)$/i, "");
+		const entry: Entry = { newTarget, stem: stemFromRelative(newRelative) };
+		byRelativeKey.set(fromKey, entry);
+		const fromStemKey = stemFromRelative(
+			relativeWorkspacePath(normalizePath(moved.fromPath), workspacePath),
+		).toLocaleLowerCase();
+		byStem.set(fromStemKey, byStem.has(fromStemKey) ? null : entry);
+	}
+
+	return rewriteWikiLinksInContent(content, (target) => {
+		const [path, ...hashParts] = target.split("#");
+		const hash = hashParts.length > 0 ? `#${hashParts.join("#")}` : "";
+		if (!path) return null;
+		const hadExtension = hasMarkdownExtension(path);
+		const fromPath = absoluteWorkspacePath(
+			withMarkdownExtension(path),
+			workspacePath,
+		);
+		const relKey = wikiTargetKey(fromPath, workspacePath);
+		const direct = byRelativeKey.get(relKey);
+		if (direct) {
+			const base = hadExtension ? `${direct.newTarget}.md` : direct.newTarget;
+			return `${base}${hash}`;
+		}
+		// Stem shorthand: `[[Foo]]` — only when the target has no folder prefix.
+		if (!path.includes("/") && !path.includes("\\")) {
+			const stemEntry = byStem.get(path.toLocaleLowerCase());
+			if (stemEntry) {
+				const base = hadExtension ? `${stemEntry.stem}.md` : stemEntry.stem;
+				return `${base}${hash}`;
+			}
+		}
+		return null;
+	});
 }
 
 /**

@@ -1,4 +1,13 @@
 import {
+	computePosition,
+	flip,
+	offset,
+	shift,
+	type VirtualElement,
+} from "@floating-ui/dom";
+import {
+	buildWikiLinkValidTargetKeys,
+	ChildPage,
 	ContextMenuSpellcheckExtension,
 	combineMarkdownFrontMatter,
 	FakeSelectionExtension,
@@ -13,7 +22,10 @@ import {
 	ReviewMarkExtension,
 	RichTextClipboardExtension,
 	resetEditorHistory,
+	setWikiLinkValidTargetKeys,
 	tiptapDocToMarkdown,
+	toggleExtensions,
+	WikiLinkValidityExtension,
 } from "@hubble.md/editor";
 import type { Editor } from "@tiptap/core";
 import { TaskItem } from "@tiptap/extension-list";
@@ -26,13 +38,14 @@ import {
 	useEditor,
 } from "@tiptap/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AtMentionExtension } from "./AtMentionExtension";
 import { clearActiveEditor, setActiveEditor } from "./activeEditor";
 import { CODE_BLOCK_COPY_EVENT, HubbleCodeBlock } from "./CodeBlockExtension";
 import { copySelectionAsMarkdown } from "./copyAsMarkdown";
 import { EmptyBlockDirectionExtension } from "./EmptyBlockDirectionExtension";
 import { LinkClickExtension } from "./LinkClickExtension";
 import { LinkCreationGhostExtension } from "./LinkCreationGhostExtension";
-import { LinkPopover, type WikiTarget } from "./LinkPopover";
+import type { WikiTarget } from "./LinkPopover";
 import {
 	flushPendingSave,
 	type PendingSave,
@@ -46,6 +59,8 @@ import {
 	MarkdownTableHeader,
 } from "./TableMarkdownExtensions";
 import { VirtualCursor } from "./VirtualCursor";
+import { WikiLinkPicker } from "./WikiLinkPicker";
+import { WikiLinkPreview } from "./WikiLinkPreview";
 import "./EditorView.css";
 import {
 	EditorCommandShortcuts,
@@ -90,12 +105,40 @@ export type EditorViewProps = {
 	copyAsMarkdownRequest?: number;
 	onOpenExternalLink: (href: string) => void | Promise<void>;
 	onOpenWikiLink: (target: string) => void | Promise<void>;
+	/**
+	 * Resolve preview content for a wiki link target. Returning `null` skips
+	 * showing a preview (e.g. the target doesn't resolve to a file). The
+	 * EditorView caches recent results, so this can safely re-read the file.
+	 */
+	onPreviewWikiLink?: (
+		target: string,
+	) => Promise<{ title: string; excerpt: string } | null>;
+	/**
+	 * Create a new page next to the current file and return its wiki target
+	 * (workspace-relative path). Returns null on failure.
+	 */
+	onCreateAndInsertWikiPage?: (name: string) => Promise<string | null>;
 	onMessage?: (message: string, type: "success" | "error") => void;
 	/** Review threads in the open document, republished on every edit, so an
 	 * app can list them in its own chrome. */
 	onReviewThreadsChange?: (threads: ReviewThread[]) => void;
+	/** Published headings, for host apps that render their own outline/TOC. */
+	onHeadingsChange?: (headings: OutlineHeading[]) => void;
 	/** Footer status for non-default spellcheck languages. Desktop-only. */
 	spellcheckStatus?: SpellcheckStatus | null;
+	/**
+	 * Enables format-menu commands that act on the open workspace file
+	 * (e.g. "Copy page link"). Defaults to false for consumers that render
+	 * EditorView outside a workspace.
+	 */
+	hasOpenWorkspaceFile?: boolean;
+};
+
+export type OutlineHeading = {
+	id: string;
+	level: number;
+	text: string;
+	pos: number;
 };
 
 export function EditorView({
@@ -116,9 +159,13 @@ export function EditorView({
 	copyAsMarkdownRequest = 0,
 	onOpenExternalLink,
 	onOpenWikiLink,
+	onPreviewWikiLink,
 	onMessage,
 	onReviewThreadsChange,
+	onHeadingsChange,
+	onCreateAndInsertWikiPage,
 	spellcheckStatus,
+	hasOpenWorkspaceFile = false,
 }: EditorViewProps) {
 	const initialFrontMatter = parseMarkdownFrontMatter(initialMarkdown);
 	const initialFrontMatterRaw =
@@ -136,8 +183,7 @@ export function EditorView({
 	const lastCopyAsMarkdownRequestRef = useRef(copyAsMarkdownRequest);
 	const [editorViewportEl, setEditorViewportEl] =
 		useState<HTMLDivElement | null>(null);
-	const [cursorModeOverride, setCursorModeOverride] =
-		useState<VirtualCursorMode | null>(null);
+	const [cursorModeOverride] = useState<VirtualCursorMode | null>(null);
 	const [reviewCommentRequest, setReviewCommentRequest] = useState(0);
 	const [frontMatterState, setFrontMatterState] = useState(() =>
 		frontMatterStateFromMarkdown(initialMarkdown),
@@ -180,6 +226,7 @@ export function EditorView({
 			}),
 			InlineCodeExtension,
 			HubbleCodeBlock,
+			ChildPage,
 			LinkExtension,
 			RichTextClipboardExtension,
 			SmartLinkExtension,
@@ -197,7 +244,10 @@ export function EditorView({
 			MarkdownRolloverExtension,
 			ReviewMarkExtension,
 			EditorCommandShortcuts,
+			AtMentionExtension,
+			WikiLinkValidityExtension,
 			...listExtensions,
+			...toggleExtensions,
 			...extensions,
 			TaskItem.configure({ nested: true }),
 			Table.configure({ resizable: true }),
@@ -207,6 +257,9 @@ export function EditorView({
 			TableCellSelectionExtension,
 		],
 		content: initialDoc,
+		onCreate: ({ editor: current }) => {
+			publishHeadings(current, onHeadingsChange);
+		},
 		onUpdate: ({ editor: current }) => {
 			const doc = current.getJSON() as JSONContent;
 			if (hasUploadImage(doc)) return;
@@ -219,6 +272,7 @@ export function EditorView({
 			latestMarkdownRef.current = markdown;
 			onLocalChange(pathRef.current, markdown);
 			scheduleSave();
+			publishHeadings(current, onHeadingsChange);
 		},
 		editorProps: {
 			...editorProps,
@@ -245,6 +299,30 @@ export function EditorView({
 		setActiveEditor(editor);
 		return () => clearActiveEditor(editor);
 	}, [editor]);
+
+	// Push the valid wiki target set into the WikiLinkValidityExtension plugin
+	// whenever the workspace file list changes. The plugin re-decorates the doc
+	// so links flip between the muted "invalid" style and the normal style as
+	// soon as the matching file appears or disappears.
+	useEffect(() => {
+		if (!editor) return;
+		const keys = buildWikiLinkValidTargetKeys(wikiTargets);
+		setWikiLinkValidTargetKeys(editor.view, keys);
+	}, [editor, wikiTargets]);
+
+	// LK-08: hover preview. Delay before showing, keep a single instance, cache
+	// recent previews to avoid rereading the same file on round-trip hover.
+	const [hoverPreview, setHoverPreview] = useState<{
+		position: { x: number; y: number };
+		title: string;
+		excerpt: string;
+		loading: boolean;
+	} | null>(null);
+	useHoverPreview({
+		editorRoot: editorViewportEl,
+		onPreviewWikiLink,
+		setPreview: setHoverPreview,
+	});
 
 	useEffect(() => {
 		if (!editor || !editorViewportEl) return;
@@ -355,19 +433,23 @@ export function EditorView({
 					viewportRef={editorViewportRef}
 					modeOverride={cursorModeOverride}
 				/>
+				{hoverPreview && (
+					<WikiLinkPreview
+						position={hoverPreview.position}
+						loading={hoverPreview.loading}
+						title={hoverPreview.title}
+						excerpt={hoverPreview.excerpt}
+					/>
+				)}
 				{editable && (
 					<>
-						<LinkPopover
+						<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
+						<WikiLinkPicker
 							editor={editor}
-							containerRef={editorRootRef}
 							viewportRef={editorViewportRef}
 							wikiTargets={wikiTargets}
-							onOpenExternalLink={onOpenExternalLink}
-							onOpenWikiLink={onOpenWikiLink}
-							onMessage={onMessage}
-							onCursorModeChange={setCursorModeOverride}
+							onCreateAndInsert={onCreateAndInsertWikiPage}
 						/>
-						<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
 						<SelectionFormattingToolbar
 							editor={editor}
 							viewport={editorViewportEl}
@@ -384,6 +466,7 @@ export function EditorView({
 						<FormatCommandMenu
 							editor={editor}
 							viewportRef={editorViewportRef}
+							hasOpenWorkspaceFile={hasOpenWorkspaceFile}
 						/>
 					</>
 				)}
@@ -401,4 +484,239 @@ export function EditorView({
 function hasUploadImage(node: JSONContent): boolean {
 	if (node.type === "image" && node.attrs?.uploadId) return true;
 	return node.content?.some(hasUploadImage) ?? false;
+}
+
+// LK-08: lightweight hover preview. Delay before showing to avoid popping on
+// cursor pass-through, dismiss on mouseleave, and keep a single instance by
+// aborting any in-flight load when the pointer moves to a different link.
+const HOVER_PREVIEW_DELAY_MS = 500;
+const HOVER_PREVIEW_CACHE_LIMIT = 16;
+
+type HoverPreviewState = {
+	position: { x: number; y: number };
+	title: string;
+	excerpt: string;
+	loading: boolean;
+} | null;
+
+function useHoverPreview({
+	editorRoot,
+	onPreviewWikiLink,
+	setPreview,
+}: {
+	editorRoot: HTMLDivElement | null;
+	onPreviewWikiLink:
+		| ((target: string) => Promise<{ title: string; excerpt: string } | null>)
+		| undefined;
+	setPreview: (next: HoverPreviewState) => void;
+}) {
+	const cacheRef = useRef<Map<string, { title: string; excerpt: string }>>(
+		new Map(),
+	);
+
+	useEffect(() => {
+		if (!editorRoot) return;
+		if (!onPreviewWikiLink) return;
+
+		let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+		const loadState = { token: 0 };
+		let currentAnchor: HTMLElement | null = null;
+
+		const clearHover = () => {
+			if (hoverTimer) {
+				clearTimeout(hoverTimer);
+				hoverTimer = null;
+			}
+			loadState.token += 1;
+			currentAnchor = null;
+			setPreview(null);
+		};
+
+		const positionFor = (
+			anchor: HTMLElement,
+		): Promise<{ x: number; y: number } | null> => {
+			const reference: VirtualElement = {
+				contextElement: anchor,
+				getBoundingClientRect: () => anchor.getBoundingClientRect(),
+			};
+			const floatingEl = document.createElement("div");
+			floatingEl.style.position = "absolute";
+			floatingEl.style.visibility = "hidden";
+			floatingEl.style.inlineSize = "280px";
+			floatingEl.style.blockSize = "80px";
+			editorRoot.appendChild(floatingEl);
+			return computePosition(reference, floatingEl, {
+				strategy: "absolute",
+				placement: "top",
+				middleware: [
+					offset(6),
+					flip({ boundary: editorRoot, fallbackPlacements: ["bottom"] }),
+					shift({ boundary: editorRoot, padding: 8 }),
+				],
+			})
+				.then(({ x, y }) => {
+					floatingEl.remove();
+					return { x, y };
+				})
+				.catch(() => {
+					floatingEl.remove();
+					return null;
+				});
+		};
+
+		const schedulePreview = (anchor: HTMLElement) => {
+			// Dead links skip preview — nothing to show for a missing file.
+			if (anchor.closest("[data-link-invalid]")) return;
+			if (anchor.closest("[data-child-page-missing='true']")) return;
+			const target = extractWikiTarget(anchor);
+			if (!target) return;
+
+			currentAnchor = anchor;
+			if (hoverTimer) clearTimeout(hoverTimer);
+			hoverTimer = setTimeout(() => {
+				hoverTimer = null;
+				loadState.token += 1;
+				const token = loadState.token;
+				void positionFor(anchor).then(async (position) => {
+					if (!position) return;
+					if (token !== loadState.token) return;
+					const cached = cacheRef.current.get(target);
+					if (cached) {
+						setPreview({
+							position,
+							title: cached.title,
+							excerpt: cached.excerpt,
+							loading: false,
+						});
+						return;
+					}
+					setPreview({ position, title: target, excerpt: "", loading: true });
+					try {
+						const result = await onPreviewWikiLink(target);
+						if (token !== loadState.token) return;
+						if (!result) {
+							setPreview(null);
+							return;
+						}
+						rememberPreview(cacheRef.current, target, result);
+						setPreview({
+							position,
+							title: result.title,
+							excerpt: result.excerpt,
+							loading: false,
+						});
+					} catch {
+						if (token !== loadState.token) return;
+						setPreview(null);
+					}
+				});
+			}, HOVER_PREVIEW_DELAY_MS);
+		};
+
+		const findLinkAnchor = (node: EventTarget | null): HTMLElement | null => {
+			if (!(node instanceof Element)) return null;
+			return node.closest<HTMLElement>(
+				'[data-link-kind="wiki"], [data-type="child-page"]',
+			);
+		};
+
+		const onMouseOver = (event: MouseEvent) => {
+			const anchor = findLinkAnchor(event.target);
+			if (!anchor) {
+				if (currentAnchor) clearHover();
+				return;
+			}
+			if (anchor === currentAnchor) return;
+			clearHover();
+			schedulePreview(anchor);
+		};
+
+		const onMouseOut = (event: MouseEvent) => {
+			if (!currentAnchor) return;
+			const related = event.relatedTarget;
+			if (related instanceof Node && currentAnchor.contains(related)) return;
+			clearHover();
+		};
+
+		const onScroll = () => {
+			if (currentAnchor) clearHover();
+		};
+
+		editorRoot.addEventListener("mouseover", onMouseOver);
+		editorRoot.addEventListener("mouseout", onMouseOut);
+		editorRoot.addEventListener("scroll", onScroll, { passive: true });
+		return () => {
+			editorRoot.removeEventListener("mouseover", onMouseOver);
+			editorRoot.removeEventListener("mouseout", onMouseOut);
+			editorRoot.removeEventListener("scroll", onScroll);
+			clearHover();
+		};
+	}, [editorRoot, onPreviewWikiLink, setPreview]);
+}
+
+function extractWikiTarget(anchor: HTMLElement): string | null {
+	const target = anchor.getAttribute("data-target");
+	if (target) return target;
+	const kind = anchor.getAttribute("data-link-kind");
+	if (kind === "wiki") {
+		return anchor.getAttribute("data-href") ?? null;
+	}
+	const inner = anchor.querySelector<HTMLElement>('[data-link-kind="wiki"]');
+	if (inner) {
+		return (
+			inner.getAttribute("data-target") ??
+			inner.getAttribute("data-href") ??
+			null
+		);
+	}
+	return anchor.getAttribute("data-href") ?? null;
+}
+
+function rememberPreview(
+	cache: Map<string, { title: string; excerpt: string }>,
+	target: string,
+	value: { title: string; excerpt: string },
+) {
+	cache.delete(target);
+	cache.set(target, value);
+	while (cache.size > HOVER_PREVIEW_CACHE_LIMIT) {
+		const oldest = cache.keys().next().value;
+		if (oldest === undefined) break;
+		cache.delete(oldest);
+	}
+}
+
+function publishHeadings(
+	editor: Editor,
+	onHeadingsChange: ((headings: OutlineHeading[]) => void) | undefined,
+) {
+	if (!onHeadingsChange) return;
+	const list: OutlineHeading[] = [];
+	editor.state.doc.descendants((node, pos) => {
+		if (node.type.name === "heading") {
+			const text = node.textContent.trim();
+			if (!text) return;
+			list.push({
+				id: `h-${pos}`,
+				level: Number(node.attrs.level ?? 1),
+				text,
+				pos,
+			});
+			return;
+		}
+		if (node.type.name === "toggleBlock") {
+			const level = Number(node.attrs.level ?? 0);
+			if (level < 1 || level > 6) return;
+			const text = node.firstChild?.textContent?.trim() ?? "";
+			if (!text) return;
+			list.push({
+				id: `h-${pos}`,
+				level,
+				text,
+				pos,
+			});
+			return;
+		}
+	});
+	onHeadingsChange(list);
 }

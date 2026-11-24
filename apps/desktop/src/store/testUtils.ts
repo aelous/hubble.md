@@ -9,6 +9,8 @@ export type MockDesktopApi = {
 	createFolder: ReturnType<typeof vi.fn>;
 	renameFile: ReturnType<typeof vi.fn>;
 	deleteFile: ReturnType<typeof vi.fn>;
+	readBinaryFile: ReturnType<typeof vi.fn>;
+	writeBinaryFile: ReturnType<typeof vi.fn>;
 	stageDelete: ReturnType<typeof vi.fn>;
 	restoreDelete: ReturnType<typeof vi.fn>;
 	finalizeDelete: ReturnType<typeof vi.fn>;
@@ -37,6 +39,8 @@ export function createDesktopApi(): MockDesktopApi {
 		createFolder: vi.fn(async () => {}),
 		renameFile: vi.fn(async () => {}),
 		deleteFile: vi.fn(async () => {}),
+		readBinaryFile: vi.fn(async () => []),
+		writeBinaryFile: vi.fn(async () => {}),
 		stageDelete: vi.fn(async () => "delete-token"),
 		restoreDelete: vi.fn(async () => {}),
 		finalizeDelete: vi.fn(async () => {}),

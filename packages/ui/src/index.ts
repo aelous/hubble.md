@@ -39,10 +39,12 @@ export {
 export {
 	EditorView,
 	type EditorViewProps,
+	type OutlineHeading,
 	type WikiTarget,
 } from "./editor/EditorView";
 export type { SpellcheckStatus } from "./editor/FormattingStatusBar";
 export { FormattingStatusBar } from "./editor/FormattingStatusBar";
+export { COPY_PAGE_LINK_EVENT } from "./editor/formatCommands";
 export { classifyHref } from "./editor/href";
 export { LinkCreationGhostExtension } from "./editor/LinkCreationGhostExtension";
 export {

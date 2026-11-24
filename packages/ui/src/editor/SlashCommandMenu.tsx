@@ -9,6 +9,8 @@ import {
 	useState,
 } from "react";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
+import MingcuteDocumentLine from "~icons/mingcute/document-line";
+import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -105,6 +107,42 @@ const SLASH_COMMANDS: SlashCommand[] = [
 		icon: MingcuteQuoteLeftLine,
 	},
 	{
+		kind: "toggle",
+		title: "Toggle",
+		description: "Collapsible block for hiding content",
+		aliases: [
+			"toggle",
+			"details",
+			"collapse",
+			"fold",
+			"callout",
+			"折叠",
+			"展开",
+		],
+		icon: MingcuteDownSmallLine,
+	},
+	{
+		kind: "toggleHeading1",
+		title: "Toggle heading 1",
+		description: "Large collapsible heading",
+		aliases: ["toggle h1", "toggleh1", "th1", "collapse h1"],
+		icon: MingcuteDownSmallLine,
+	},
+	{
+		kind: "toggleHeading2",
+		title: "Toggle heading 2",
+		description: "Medium collapsible heading",
+		aliases: ["toggle h2", "toggleh2", "th2", "collapse h2"],
+		icon: MingcuteDownSmallLine,
+	},
+	{
+		kind: "toggleHeading3",
+		title: "Toggle heading 3",
+		description: "Small collapsible heading",
+		aliases: ["toggle h3", "toggleh3", "th3", "collapse h3"],
+		icon: MingcuteDownSmallLine,
+	},
+	{
 		kind: "divider",
 		title: "Divider",
 		description: "Separate sections",
@@ -126,10 +164,24 @@ const SLASH_COMMANDS: SlashCommand[] = [
 		aliases: ["table", "grid"],
 		icon: MingcuteTable2Line,
 	},
+	{
+		kind: "linkToPage",
+		title: "Link to page",
+		description: "Insert a link to another page",
+		aliases: ["link", "mention", "wiki", "@"],
+		icon: MingcuteDocumentLine,
+	},
+	{
+		kind: "childPage",
+		title: "Child page",
+		description: "Create a new sub-page inside this note",
+		aliases: ["page", "sub", "subpage", "child", "new page", "子页面", "子"],
+		icon: MingcuteDocumentLine,
+	},
 ];
 
 // Table cells only hold inline content, so block commands are hidden there.
-const INLINE_COMMANDS = new Set<SlashCommandKind>(["strike"]);
+const INLINE_COMMANDS = new Set<SlashCommandKind>(["strike", "linkToPage"]);
 
 export function SlashCommandMenu({
 	editor,

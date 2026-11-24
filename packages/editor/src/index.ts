@@ -1,3 +1,10 @@
+export {
+	CHILD_PAGE_CREATE_EVENT,
+	ChildPage,
+	type ChildPageCreateDetail,
+	TURN_INTO_PAGE_EVENT,
+	type TurnIntoPageDetail,
+} from "./ChildPage.js";
 export { ContextMenuSpellcheckExtension } from "./ContextMenuSpellcheckExtension.js";
 export {
 	type AppCommandId,
@@ -87,9 +94,23 @@ export {
 } from "./RichTextClipboardExtension.js";
 export { StoredMarksDecorationExtension } from "./StoredMarksDecorationExtension.js";
 export {
+	ToggleBlock,
+	ToggleContent,
+	ToggleSummary,
+	toggleExtensions,
+} from "./ToggleBlock.js";
+export {
 	isSelectionAtStartOfNode,
 	nearestSharedParentOfType,
 	parentsOfType,
 	textEndPos,
 	textStartPos,
 } from "./utils.js";
+export {
+	buildWikiLinkValidTargetKeys,
+	isWikiTargetValid,
+	setWikiLinkValidTargetKeys,
+	WikiLinkValidityExtension,
+	type WikiLinkValidityState,
+	wikiLinkValidityKey,
+} from "./WikiLinkValidityExtension.js";

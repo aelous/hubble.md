@@ -1,14 +1,20 @@
 import {
 	type AppCommandId,
+	CHILD_PAGE_CREATE_EVENT,
+	type ChildPageCreateDetail,
 	commandRegistry,
 	getCommand,
 	getCommandBinding,
 	getCommandBindings,
+	hasMarkdownExtension,
 	resolveCommandBinding,
+	TURN_INTO_PAGE_EVENT,
+	type TurnIntoPageDetail,
 	wikiDisplayNameForTarget,
 } from "@hubble.md/editor";
 import {
 	Button,
+	COPY_PAGE_LINK_EVENT,
 	classifyHref,
 	EditorView,
 	formatShortcut,
@@ -16,6 +22,7 @@ import {
 	getActiveEditor,
 	MarkdownSourceEditor,
 	OPEN_COMMAND_PALETTE_EVENT,
+	type OutlineHeading,
 	type PaletteFile,
 	PlainTextEditor,
 	type SpellcheckStatus,
@@ -23,6 +30,7 @@ import {
 	type WikiTarget,
 } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
+import { NodeSelection } from "@tiptap/pm/state";
 import { keymatch } from "keymatch";
 import {
 	useEffect,
@@ -38,9 +46,12 @@ import {
 	recordRecentCommand,
 } from "./commands/recentCommands";
 import { buildAppCommands } from "./commands/useAppCommands";
+import { BacklinksPanel } from "./components/BacklinksPanel";
+import { Breadcrumb } from "./components/Breadcrumb";
 import { FileInfoBar } from "./components/FileInfoBar";
 import { HtmlAppEmptyState } from "./components/HtmlAppEmptyState";
 import { NewTabPage } from "./components/NewTabPage";
+import { OutlinePanel } from "./components/OutlinePanel";
 import { Settings, type SettingsTarget } from "./components/Settings";
 import { type DesktopSidebarFocus, Sidebar } from "./components/Sidebar";
 import { SkippedSkillsDialog } from "./components/SkippedSkillsDialog";
@@ -86,6 +97,8 @@ import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
 	activateAdjacentTab,
 	closeActiveTab,
+	copyPageLink,
+	createChildPage,
 	createWorkspaceWithSidebar,
 	editorDocumentId,
 	forceKeepLocalEdits,
@@ -116,6 +129,7 @@ import {
 	setWorkspaceSwitcherOpen,
 	toggleSidebarView,
 	toggleTerminal,
+	turnBlockIntoChildPage,
 	undoDelete,
 	updateEditorContent,
 } from "./store/actions";
@@ -167,6 +181,40 @@ function folderForSidebarFocus(
 
 function focusSidebarNav() {
 	document.querySelector<HTMLElement>(SIDEBAR_NAV_SELECTOR)?.focus();
+}
+
+// First N non-empty lines of a file, stripping the YAML front matter block and
+// obvious markdown syntax (headings, list bullets, link markup) so the hover
+// preview reads as plain prose rather than source.
+function firstNonEmptyLines(text: string, maxLines: number): string {
+	let source = text;
+	if (source.startsWith("---")) {
+		const match = source.match(/^---\n[\s\S]*?\n---\n?/);
+		if (match) source = source.slice(match[0].length);
+	}
+	const lines: string[] = [];
+	for (const rawLine of source.split(/\r?\n/)) {
+		const stripped = stripMarkdownSyntax(rawLine).trim();
+		if (!stripped) continue;
+		lines.push(stripped);
+		if (lines.length >= maxLines) break;
+	}
+	return lines.join("\n");
+}
+
+function stripMarkdownSyntax(line: string): string {
+	return line
+		.replace(/^#{1,6}\s+/, "")
+		.replace(/^\s*[-*+]\s+/, "")
+		.replace(/^\s*>\s?/, "")
+		.replace(/^\s*\d+\.\s+/, "")
+		.replace(
+			/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g,
+			(_, path, label) => label ?? path,
+		)
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+		.replace(/[*_`]/g, "");
 }
 
 function showSidebarView(view: SidebarView) {
@@ -253,6 +301,8 @@ function App() {
 	};
 	const [allTabsOpen, setAllTabsOpen] = useState(false);
 	const [copyAsMarkdownRequest, setCopyAsMarkdownRequest] = useState(0);
+	const [outlineOpen, setOutlineOpen] = useState(false);
+	const [outlineHeadings, setOutlineHeadings] = useState<OutlineHeading[]>([]);
 	const [updateState, setUpdateState] = useState<DesktopUpdateState | null>(
 		null,
 	);
@@ -376,6 +426,7 @@ function App() {
 			focusSidebar: focusSidebarNav,
 			openNewTab: () => openNewTabPage(),
 			toggleAllTabs: () => setAllTabsOpen((open) => !open),
+			toggleOutline: () => setOutlineOpen((open) => !open),
 		},
 		{
 			currentPath: state.currentPath ?? null,
@@ -582,6 +633,7 @@ function App() {
 					setSidebarOpen(opening);
 					if (opening) requestAnimationFrame(() => focusSidebarNav());
 				},
+				"app.toggle-outline": () => setOutlineOpen((open) => !open),
 				"app.show-folders": () => showSidebarView("folders"),
 				"app.show-inbox": () => showSidebarView("inbox"),
 			};
@@ -637,6 +689,128 @@ function App() {
 		return () => window.removeEventListener("keydown", onKeyDown);
 		// biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler stabilizes render-local callbacks.
 	}, [openSearch, createNewFile, focusedSidebarPath]);
+
+	useEffect(() => {
+		const handleChildPageRequest = (event: Event) => {
+			const detail = (event as CustomEvent<ChildPageCreateDetail>).detail;
+			if (!detail) return;
+			const parentPath = viewerStore.get().currentPath;
+			if (!parentPath || isVirtualPath(parentPath)) return;
+			if (!hasMarkdownExtension(parentPath)) return;
+			const editor = getActiveEditor();
+			if (!editor) return;
+			void (async () => {
+				const created = await createChildPage(parentPath);
+				if (!created) return;
+				const freshEditor = getActiveEditor();
+				if (!freshEditor) {
+					await loadPath(created.path);
+					return;
+				}
+				const schema = freshEditor.state.schema;
+				const childPageType = schema.nodes.childPage;
+				if (!childPageType) {
+					await loadPath(created.path);
+					return;
+				}
+				// Insert the childPage node at the block position recorded when the
+				// slash command fired. If the user has edited since, the mapping
+				// still lets ProseMirror place it at a safe nearby position.
+				const node = childPageType.create({ href: created.target });
+				const doc = freshEditor.state.doc;
+				const safeStart = Math.min(
+					Math.max(detail.blockStart, 0),
+					doc.content.size,
+				);
+				const safeEnd = Math.min(
+					Math.max(detail.blockEnd, safeStart),
+					doc.content.size,
+				);
+				const block = doc.nodeAt(safeStart);
+				const replacingEmpty =
+					block?.type.name === "paragraph" && block.content.size === 0;
+				const tr = freshEditor.state.tr;
+				if (replacingEmpty) {
+					tr.replaceWith(safeStart, safeEnd, node);
+				} else {
+					tr.insert(safeEnd, node);
+				}
+				freshEditor.view.dispatch(tr);
+				await loadPath(created.path);
+			})();
+		};
+		window.addEventListener(CHILD_PAGE_CREATE_EVENT, handleChildPageRequest);
+		return () =>
+			window.removeEventListener(
+				CHILD_PAGE_CREATE_EVENT,
+				handleChildPageRequest,
+			);
+	}, []);
+
+	useEffect(() => {
+		const handleTurnIntoPageRequest = (event: Event) => {
+			const detail = (event as CustomEvent<TurnIntoPageDetail>).detail;
+			if (!detail) return;
+			const parentPath = viewerStore.get().currentPath;
+			if (!parentPath || isVirtualPath(parentPath)) return;
+			if (!hasMarkdownExtension(parentPath)) return;
+			const editor = getActiveEditor();
+			if (!editor) return;
+			void (async () => {
+				const created = await turnBlockIntoChildPage({
+					parentPath,
+					markdown: detail.blockMarkdown,
+				});
+				if (!created) return;
+				const freshEditor = getActiveEditor();
+				if (!freshEditor) return;
+				const schema = freshEditor.state.schema;
+				const childPageType = schema.nodes.childPage;
+				if (!childPageType) return;
+				const doc = freshEditor.state.doc;
+				const safeStart = Math.min(
+					Math.max(detail.blockStart, 0),
+					doc.content.size,
+				);
+				const safeEnd = Math.min(
+					Math.max(detail.blockEnd, safeStart),
+					doc.content.size,
+				);
+				const node = childPageType.create({ href: created.target });
+				const tr = freshEditor.state.tr;
+				tr.replaceWith(safeStart, safeEnd, node);
+				// Place the cursor on the new childPage block so the user can
+				// keep working after the promotion.
+				const insertPos = tr.mapping.map(safeStart);
+				const docAfter = tr.doc;
+				if (insertPos < docAfter.content.size) {
+					tr.setSelection(NodeSelection.create(docAfter, insertPos));
+				}
+				freshEditor.view.dispatch(tr);
+				freshEditor.view.focus();
+			})();
+		};
+		window.addEventListener(TURN_INTO_PAGE_EVENT, handleTurnIntoPageRequest);
+		return () =>
+			window.removeEventListener(
+				TURN_INTO_PAGE_EVENT,
+				handleTurnIntoPageRequest,
+			);
+	}, []);
+
+	useEffect(() => {
+		const handleCopyPageLinkRequest = () => {
+			const currentPath = viewerStore.get().currentPath;
+			if (!currentPath || isVirtualPath(currentPath)) return;
+			void copyPageLink(currentPath);
+		};
+		window.addEventListener(COPY_PAGE_LINK_EVENT, handleCopyPageLinkRequest);
+		return () =>
+			window.removeEventListener(
+				COPY_PAGE_LINK_EVENT,
+				handleCopyPageLinkRequest,
+			);
+	}, []);
 
 	useEffect(() => {
 		let active = true;
@@ -916,57 +1090,67 @@ function App() {
 					aria-live="polite"
 					onFocusCapture={closeSidebarOverlay}
 				>
-					<div className="flex-1 min-h-0 min-w-0 flex flex-col">
-						{showTabStrip && isFileOpen ? (
-							<FileInfoBar scrollContainer={scrollContainerEl} />
-						) : null}
-						<div data-note-body className="flex-1 min-h-0 min-w-0 relative">
-							{state.status === "loading" && <p>Loading…</p>}
-							{state.status === "error" && (
-								<p>{state.error ?? "Failed to open file."}</p>
-							)}
-							{state.status !== "loading" &&
-								state.status !== "error" &&
-								!state.currentPath &&
-								!hasWorkspace && (
-									<div className="flex h-full items-center justify-center p-6">
-										<WelcomeScreen
-											onCreateFolder={() => void createWorkspaceWithSidebar()}
-											onOpenFolder={() => void openWorkspaceWithSidebar()}
-										/>
-									</div>
+					<div className="flex-1 min-w-0 min-h-0 flex flex-row overflow-hidden">
+						<div className="flex-1 min-h-0 min-w-0 flex flex-col">
+							{showTabStrip && isFileOpen ? (
+								<FileInfoBar scrollContainer={scrollContainerEl} />
+							) : null}
+							<div data-note-body className="flex-1 min-h-0 min-w-0 relative">
+								{state.status === "loading" && <p>Loading…</p>}
+								{state.status === "error" && (
+									<p>{state.error ?? "Failed to open file."}</p>
 								)}
-							{/* With no tabs open, the blank page doubles as the empty state. */}
-							{state.status !== "loading" &&
-								state.status !== "error" &&
-								(isNewTabPath(state.currentPath) ||
-									(!state.currentPath && hasWorkspace)) && (
-									<NewTabPage
-										folder={focusedCreationFolder}
-										onSearch={openSearch}
-									/>
-								)}
-							{state.status === "ready" &&
-								state.currentPath &&
-								!isNewTabPath(state.currentPath) && (
-									<div className="flex h-full min-h-0 flex-col">
-										{state.externalChange.kind === "conflict" && (
-											<ExternalChangeBanner
-												onKeepMyEdits={() => void forceKeepLocalEdits()}
-												onReloadFromDisk={reloadFromDiskConflict}
+								{state.status !== "loading" &&
+									state.status !== "error" &&
+									!state.currentPath &&
+									!hasWorkspace && (
+										<div className="flex h-full items-center justify-center p-6">
+											<WelcomeScreen
+												onCreateFolder={() => void createWorkspaceWithSidebar()}
+												onOpenFolder={() => void openWorkspaceWithSidebar()}
 											/>
-										)}
-										<DocumentViewer
-											path={state.currentPath}
-											content={state.content}
-											copyAsMarkdownRequest={copyAsMarkdownRequest}
-											viewMode={state.viewMode}
-											spellcheckStatus={spellcheckStatus}
-											onScrollContainerChange={setScrollContainerEl}
+										</div>
+									)}
+								{/* With no tabs open, the blank page doubles as the empty state. */}
+								{state.status !== "loading" &&
+									state.status !== "error" &&
+									(isNewTabPath(state.currentPath) ||
+										(!state.currentPath && hasWorkspace)) && (
+										<NewTabPage
+											folder={focusedCreationFolder}
+											onSearch={openSearch}
 										/>
-									</div>
-								)}
+									)}
+								{state.status === "ready" &&
+									state.currentPath &&
+									!isNewTabPath(state.currentPath) && (
+										<div className="flex h-full min-h-0 flex-col">
+											{state.externalChange.kind === "conflict" && (
+												<ExternalChangeBanner
+													onKeepMyEdits={() => void forceKeepLocalEdits()}
+													onReloadFromDisk={reloadFromDiskConflict}
+												/>
+											)}
+											<Breadcrumb />
+											<DocumentViewer
+												path={state.currentPath}
+												content={state.content}
+												copyAsMarkdownRequest={copyAsMarkdownRequest}
+												viewMode={state.viewMode}
+												spellcheckStatus={spellcheckStatus}
+												onScrollContainerChange={setScrollContainerEl}
+												onHeadingsChange={setOutlineHeadings}
+											/>
+										</div>
+									)}
+							</div>
 						</div>
+						{outlineOpen && isFileOpen ? (
+							<OutlinePanel
+								headings={outlineHeadings}
+								onClose={() => setOutlineOpen(false)}
+							/>
+						) : null}
 					</div>
 					<TerminalPanel />
 				</section>
@@ -1001,6 +1185,7 @@ function DocumentViewer({
 	viewMode,
 	spellcheckStatus,
 	onScrollContainerChange,
+	onHeadingsChange,
 }: {
 	path: string;
 	content: string;
@@ -1008,6 +1193,7 @@ function DocumentViewer({
 	viewMode: ViewMode;
 	spellcheckStatus?: SpellcheckStatus | null;
 	onScrollContainerChange?: (el: HTMLDivElement | null) => void;
+	onHeadingsChange?: (headings: OutlineHeading[]) => void;
 }) {
 	const documentId = editorDocumentId(path);
 	if (viewMode === "source" && supportsSourceToggle(path)) {
@@ -1102,6 +1288,7 @@ function DocumentViewer({
 			copyAsMarkdownRequest={copyAsMarkdownRequest}
 			spellcheckStatus={spellcheckStatus}
 			onScrollContainerChange={onScrollContainerChange}
+			onHeadingsChange={onHeadingsChange}
 		/>
 	);
 }
@@ -1183,6 +1370,7 @@ function MarkdownEditor({
 	copyAsMarkdownRequest,
 	spellcheckStatus,
 	onScrollContainerChange,
+	onHeadingsChange,
 }: {
 	path: string;
 	documentId: string;
@@ -1190,6 +1378,7 @@ function MarkdownEditor({
 	copyAsMarkdownRequest: number;
 	spellcheckStatus?: SpellcheckStatus | null;
 	onScrollContainerChange?: (el: HTMLDivElement | null) => void;
+	onHeadingsChange?: (headings: OutlineHeading[]) => void;
 }) {
 	const workspace = useStoreValue(workspaceStore);
 	const getPath = () => viewerStore.get().currentPath ?? path;
@@ -1231,42 +1420,83 @@ function MarkdownEditor({
 		}
 	};
 	return (
-		<EditorView
-			path={path}
-			documentId={documentId}
-			preserveHistoryOnUpdate={documentId !== path}
-			initialMarkdown={initialMarkdown}
-			editable={!isChangelogPath(path)}
-			wikiTargets={wikiTargets}
-			extensions={[
-				createImageExtension(getPath),
-				createEmbedExtension({
-					workspacePath: workspace.workspacePath,
-					getFilePath: getPath,
-				}),
-			]}
-			onPaste={(editor, event) => handleImagePaste({ editor, event })}
-			onDrop={(editor, event) => handleImageDrop({ editor, event })}
-			onLocalChange={updateEditorContent}
-			onSave={savePathContent}
-			onScrollContainerChange={onScrollContainerChange}
-			copyAsMarkdownRequest={copyAsMarkdownRequest}
-			onOpenExternalLink={openExternalLink}
-			onOpenWikiLink={(target) =>
-				void loadPath(
-					resolveWikiPath({
-						target,
-						files: workspace.files,
-						workspacePath: workspace.workspacePath,
-					}),
-				)
-			}
-			onMessage={(message, kind) =>
-				kind === "success" ? toast.success(message) : toast.error(message)
-			}
-			onReviewThreadsChange={setReviewThreads}
-			spellcheckStatus={spellcheckStatus}
-		/>
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="min-h-0 flex-1">
+				<EditorView
+					path={path}
+					documentId={documentId}
+					preserveHistoryOnUpdate={documentId !== path}
+					initialMarkdown={initialMarkdown}
+					editable={!isChangelogPath(path)}
+					wikiTargets={wikiTargets}
+					extensions={[
+						createImageExtension(getPath),
+						createEmbedExtension({
+							workspacePath: workspace.workspacePath,
+							getFilePath: getPath,
+						}),
+					]}
+					onPaste={(editor, event) => handleImagePaste({ editor, event })}
+					onDrop={(editor, event) => handleImageDrop({ editor, event })}
+					onLocalChange={updateEditorContent}
+					onSave={savePathContent}
+					onScrollContainerChange={onScrollContainerChange}
+					copyAsMarkdownRequest={copyAsMarkdownRequest}
+					onOpenExternalLink={openExternalLink}
+					onOpenWikiLink={(target) =>
+						void loadPath(
+							resolveWikiPath({
+								target,
+								files: workspace.files,
+								workspacePath: workspace.workspacePath,
+							}),
+						)
+					}
+					onPreviewWikiLink={async (target) => {
+						const resolved = resolveWikiPath({
+							target,
+							files: workspace.files,
+							workspacePath: workspace.workspacePath,
+						});
+						const hasFile = workspace.files.some(
+							(file) => file.path === resolved,
+						);
+						if (!hasFile) return null;
+						try {
+							const text = await desktopApi.readFileText(resolved);
+							return {
+								title: wikiDisplayNameForTarget(target),
+								excerpt: firstNonEmptyLines(text, 5),
+							};
+						} catch {
+							return null;
+						}
+					}}
+					onCreateAndInsertWikiPage={async (name) => {
+						if (!path || !hasMarkdownExtension(path)) return null;
+						const result = await createChildPage(path, { name });
+						return result?.target ?? null;
+					}}
+					onMessage={(message, kind) =>
+						kind === "success" ? toast.success(message) : toast.error(message)
+					}
+					onReviewThreadsChange={setReviewThreads}
+					onHeadingsChange={onHeadingsChange}
+					spellcheckStatus={spellcheckStatus}
+					hasOpenWorkspaceFile={
+						workspace.workspacePath !== null && !isVirtualPath(path)
+					}
+				/>
+			</div>
+			{hasMarkdownExtension(path) ? (
+				<BacklinksPanel
+					path={path}
+					workspacePath={workspace.workspacePath}
+					files={workspace.files}
+					onOpenSource={(sourcePath) => void loadPath(sourcePath)}
+				/>
+			) : null}
+		</div>
 	);
 }
 

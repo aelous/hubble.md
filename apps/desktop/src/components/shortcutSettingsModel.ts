@@ -63,6 +63,8 @@ const descriptions: Record<CommandId, string> = {
 	"editor.heading-5": "Convert the current block to heading 5.",
 	"editor.heading-6": "Convert the current block to heading 6.",
 	"editor.blockquote": "Toggle block quote formatting.",
+	"editor.insert-date": "Insert today's date as YYYY-MM-DD 周X at the cursor.",
+	"app.toggle-outline": "Show or hide the outline panel on the right.",
 };
 
 export const shortcutCommands = (
