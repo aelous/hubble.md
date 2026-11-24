@@ -9,6 +9,14 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.4.0] - 2026-11-24
+
+### Added
+
 - Install the Hubble agent skills from inside Hubble, and they stay up to date as Hubble updates, including copies you installed with `npx skills`. [#337](https://github.com/bholmesdev/hubble.md/pull/337)
 - Create sub-pages inside a note with `/page`, and link between notes with `[[` wiki links.
 - See which notes link to the current one in a backlinks panel, and follow the breadcrumb back up to parent notes.
