@@ -34,7 +34,9 @@ const EDITOR_ACTIONS = {
 		const yyyy = d.getFullYear();
 		const mm = String(d.getMonth() + 1).padStart(2, "0");
 		const dd = String(d.getDate()).padStart(2, "0");
-		const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()];
+		const week = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+			d.getDay()
+		];
 		return chain.insertContent(`${yyyy}-${mm}-${dd} ${week}`);
 	},
 } satisfies Record<

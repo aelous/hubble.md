@@ -206,10 +206,7 @@ export function removeLinksInSelection(editor: Editor): boolean {
  * Turn the current top-level block into a Toggle. Preserves its visible text as
  * the Toggle's summary.
  */
-function convertCurrentBlockToToggle(
-	editor: Editor,
-	level: 0 | 1 | 2 | 3,
-) {
+function convertCurrentBlockToToggle(editor: Editor, level: 0 | 1 | 2 | 3) {
 	const { state } = editor;
 	const schema = state.schema;
 	const toggleBlock = schema.nodes.toggleBlock;
@@ -224,16 +221,13 @@ function convertCurrentBlockToToggle(
 	const blockEnd = $from.after(topDepth);
 	const current = state.doc.nodeAt(blockStart);
 	const summaryText = current?.textContent ?? "";
-	const toggle = toggleBlock.create(
-		{ open: false, level },
-		[
-			toggleSummary.create(
-				null,
-				summaryText ? schema.text(summaryText) : undefined,
-			),
-			toggleContent.create(null, paragraph.create()),
-		],
-	);
+	const toggle = toggleBlock.create({ open: false, level }, [
+		toggleSummary.create(
+			null,
+			summaryText ? schema.text(summaryText) : undefined,
+		),
+		toggleContent.create(null, paragraph.create()),
+	]);
 	editor
 		.chain()
 		.focus(undefined, { scrollIntoView: false })

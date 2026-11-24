@@ -1,11 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-import {
-	type BreadcrumbSegment,
-	buildBreadcrumbSegments,
-} from "./Breadcrumb";
 import type { FileEntry } from "../store/state";
+import { type BreadcrumbSegment, buildBreadcrumbSegments } from "./Breadcrumb";
 
 function file(path: string): FileEntry {
 	return { path, modified_at: 0 };
@@ -13,10 +10,7 @@ function file(path: string): FileEntry {
 
 describe("buildBreadcrumbSegments", () => {
 	it("labels ancestor folders by their paired .md file (SP-06)", () => {
-		const files = [
-			file("/ws/A.md"),
-			file("/ws/A/B.md"),
-		];
+		const files = [file("/ws/A.md"), file("/ws/A/B.md")];
 		const segments = buildBreadcrumbSegments("/ws/A/B.md", "/ws", files);
 		expect(segments).toEqual<BreadcrumbSegment[]>([
 			{ label: "A", target: "/ws/A.md" },
@@ -26,11 +20,7 @@ describe("buildBreadcrumbSegments", () => {
 
 	it("falls back to a non-clickable folder name when no sibling .md exists", () => {
 		const files = [file("/ws/plain/note.md")];
-		const segments = buildBreadcrumbSegments(
-			"/ws/plain/note.md",
-			"/ws",
-			files,
-		);
+		const segments = buildBreadcrumbSegments("/ws/plain/note.md", "/ws", files);
 		expect(segments).toEqual<BreadcrumbSegment[]>([
 			{ label: "plain", target: null },
 			{ label: "note", target: null },
@@ -48,22 +38,14 @@ describe("buildBreadcrumbSegments", () => {
 	});
 
 	it("renders only the basename for files outside the workspace", () => {
-		const segments = buildBreadcrumbSegments(
-			"/elsewhere/other.md",
-			"/ws",
-			[],
-		);
+		const segments = buildBreadcrumbSegments("/elsewhere/other.md", "/ws", []);
 		expect(segments).toEqual<BreadcrumbSegment[]>([
 			{ label: "other.md", target: null },
 		]);
 	});
 
 	it("renders only the basename when no workspace is open", () => {
-		const segments = buildBreadcrumbSegments(
-			"/anywhere/file.md",
-			null,
-			[],
-		);
+		const segments = buildBreadcrumbSegments("/anywhere/file.md", null, []);
 		expect(segments).toEqual<BreadcrumbSegment[]>([
 			{ label: "file.md", target: null },
 		]);

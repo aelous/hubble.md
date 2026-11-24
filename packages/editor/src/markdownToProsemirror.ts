@@ -948,7 +948,6 @@ function tryParseLoneChildPage(children: Content[]): JSONContent | null {
 	return { type: "childPage", attrs: { href: target } };
 }
 
-
 const remarkInlineReferences: Plugin<[]> = () => {
 	return (tree) => {
 		const definitions = new Map<string, Definition>();
@@ -1022,9 +1021,7 @@ const CALLOUT_LEVEL = /^(#{1,3})\s+/;
  * Detect an Obsidian-style foldable callout and split it into header and body.
  * Non-foldable callouts (no `-`/`+` flag) stay as plain blockquotes.
  */
-function tryParseCallout(blockquote: {
-	children?: Content[];
-}): Callout | null {
+function tryParseCallout(blockquote: { children?: Content[] }): Callout | null {
 	const children = blockquote.children ?? [];
 	const first = children[0];
 	if (!first || first.type !== "paragraph") return null;
@@ -1046,10 +1043,7 @@ function tryParseCallout(blockquote: {
 	}
 	const stripped: Paragraph = {
 		type: "paragraph",
-		children: [
-			{ ...firstChild, value: remaining },
-			...first.children.slice(1),
-		],
+		children: [{ ...firstChild, value: remaining }, ...first.children.slice(1)],
 	};
 	const summary = inlineToPM(stripped.children);
 	return {

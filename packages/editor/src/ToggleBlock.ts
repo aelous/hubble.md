@@ -1,6 +1,12 @@
 import { InputRule, mergeAttributes, Node } from "@tiptap/core";
 import type { Node as PMNode, ResolvedPos } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import {
+	type EditorState,
+	Plugin,
+	PluginKey,
+	TextSelection,
+	type Transaction,
+} from "@tiptap/pm/state";
 
 declare module "@tiptap/core" {
 	interface Commands<ReturnType> {
@@ -45,10 +51,7 @@ export const ToggleBlock = Node.create({
 	},
 
 	parseHTML() {
-		return [
-			{ tag: "details" },
-			{ tag: 'div[data-type="toggle-block"]' },
-		];
+		return [{ tag: "details" }, { tag: 'div[data-type="toggle-block"]' }];
 	},
 
 	renderHTML({ HTMLAttributes }) {
@@ -136,9 +139,7 @@ export const ToggleBlock = Node.create({
 								content: [
 									{
 										type: "toggleSummary",
-										content: text
-											? [{ type: "text", text }]
-											: undefined,
+										content: text ? [{ type: "text", text }] : undefined,
 									},
 									{
 										type: "toggleContent",
@@ -164,7 +165,10 @@ export const ToggleBlock = Node.create({
 								.insertContentAt(
 									{ from, to },
 									summaryText
-										? { type: "paragraph", content: [{ type: "text", text: summaryText }] }
+										? {
+												type: "paragraph",
+												content: [{ type: "text", text: summaryText }],
+											}
 										: { type: "paragraph" },
 								)
 								.run();
@@ -183,7 +187,7 @@ export const ToggleBlock = Node.create({
 		return [
 			new InputRule({
 				find: /^>>\s$/,
-				handler: ({ state, range, chain }) => {
+				handler: ({ state, chain }) => {
 					const { $from } = state.selection;
 					const start = $from.before($from.depth);
 					const end = $from.after($from.depth);
@@ -332,10 +336,7 @@ export const ToggleBlock = Node.create({
 								event.preventDefault();
 								return true;
 							}
-							if (
-								!event.shiftKey &&
-								nestIntoPreviousToggleAt(view)
-							) {
+							if (!event.shiftKey && nestIntoPreviousToggleAt(view)) {
 								event.preventDefault();
 								return true;
 							}
@@ -419,8 +420,8 @@ function isInsideToggleContent($from: ResolvedPos): boolean {
  * block into the Toggle's content area.
  */
 function nestIntoPreviousToggleAt(view: {
-	state: any;
-	dispatch: (tr: any) => void;
+	state: EditorState;
+	dispatch: (tr: Transaction) => void;
 }): boolean {
 	const { state } = view;
 	const { $from } = state.selection;
@@ -436,14 +437,12 @@ function nestIntoPreviousToggleAt(view: {
 	const prevStart = blockStart - prev.nodeSize;
 	const summarySize = prev.firstChild?.nodeSize ?? 2;
 	const insertAt =
-		prevStart + 1 + summarySize + prev.lastChild!.content.size + 1;
+		prevStart + 1 + summarySize + (prev.lastChild?.content.size ?? 0) + 1;
 	const tr = state.tr;
 	tr.delete(blockStart, blockEnd);
 	tr.insert(tr.mapping.map(insertAt), current);
 	tr.setNodeAttribute(prevStart, "open", true);
-	tr.setSelection(
-		TextSelection.near(tr.doc.resolve(tr.mapping.map(insertAt))),
-	);
+	tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(insertAt))));
 	view.dispatch(tr);
 	return true;
 }
@@ -453,8 +452,8 @@ function nestIntoPreviousToggleAt(view: {
  * enclosing toggleContent, placing it directly after the parent Toggle.
  */
 function liftOutOfToggleAt(view: {
-	state: any;
-	dispatch: (tr: any) => void;
+	state: EditorState;
+	dispatch: (tr: Transaction) => void;
 }): boolean {
 	const { state } = view;
 	const { $from } = state.selection;

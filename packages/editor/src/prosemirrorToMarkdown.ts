@@ -70,10 +70,7 @@ function blockToMarkdown(node: JSONContent): string {
 					? `${"#".repeat(level)} ${summaryInline}`.trimEnd()
 					: summaryInline;
 			const bodyBlocks = contentNode?.content ?? [];
-			const body = bodyBlocks
-				.map(blockToMarkdown)
-				.filter(Boolean)
-				.join("\n\n");
+			const body = bodyBlocks.map(blockToMarkdown).filter(Boolean).join("\n\n");
 			const flag = node.attrs?.open ? "+" : "-";
 			const header = `[!note]${flag} ${summary}`.trimEnd();
 			const bodyLines = body.split("\n");

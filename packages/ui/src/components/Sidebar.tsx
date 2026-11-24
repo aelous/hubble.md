@@ -653,19 +653,13 @@ export function Sidebar({
 			return;
 		}
 		updateSelection(row, "replace");
-		if (
-			(row.kind === "file" || row.kind === "pairedFile") &&
-			event.detail > 1
-		)
+		if ((row.kind === "file" || row.kind === "pairedFile") && event.detail > 1)
 			return;
 		activateRow(row);
 		requestAnimationFrame(() => navRef.current?.focus());
 	};
 	const enterRowEdit = (row: SidebarRow) => {
-		if (
-			(row.kind === "file" || row.kind === "pairedFile") &&
-			onRenameFile
-		)
+		if ((row.kind === "file" || row.kind === "pairedFile") && onRenameFile)
 			beginRename({ kind: "file", path: row.file.path }, row.label);
 		else if (row.kind === "folder" && onRenameFolder)
 			beginRename(
@@ -870,9 +864,7 @@ export function Sidebar({
 		if (!activeDragLabel || !dropTarget?.folderId) return;
 		const folderId = dropTarget.folderId;
 		const targetRow = rows.find(
-			(
-				row,
-			): row is Extract<SidebarRow, { kind: "folder" | "pairedFile" }> => {
+			(row): row is Extract<SidebarRow, { kind: "folder" | "pairedFile" }> => {
 				if (row.kind === "folder") {
 					return (
 						!row.expanded &&
@@ -1025,8 +1017,7 @@ export function Sidebar({
 				{rows.length === 0 && emptyState}
 				{rows.map((row, index) => {
 					const isFocused = focusedIndex === index;
-					const isFileRow =
-						row.kind === "file" || row.kind === "pairedFile";
+					const isFileRow = row.kind === "file" || row.kind === "pairedFile";
 					const isOpen = isFileRow && row.file.path === highlightPath;
 					const rowKey = sidebarRowKey(row);
 					const isSelected = rowKey ? selectedKeys.has(rowKey) : false;
@@ -1070,8 +1061,8 @@ export function Sidebar({
 							: false;
 					const chevron =
 						row.kind === "pairedFile" ? (
-							<span
-								role="button"
+							<button
+								type="button"
 								tabIndex={-1}
 								aria-label={rowExpanded ? "Collapse" : "Expand"}
 								onMouseDown={(event) => event.stopPropagation()}
@@ -1081,7 +1072,7 @@ export function Sidebar({
 									if (rowExpanded) collapseFolder(row.file.path);
 									else expandFolder(row.file.path);
 								}}
-								className="inline-flex size-3 shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground"
+								className="inline-flex size-3 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
 							>
 								<MingcuteRightLine
 									className={cn(
@@ -1089,7 +1080,7 @@ export function Sidebar({
 										rowExpanded && "rotate-90",
 									)}
 								/>
-							</span>
+							</button>
 						) : (
 							<span className="inline-flex size-3 shrink-0 items-center justify-center text-muted-foreground">
 								{row.kind === "folder" && (
@@ -1199,9 +1190,7 @@ export function Sidebar({
 										event.preventDefault();
 										focusItem(row);
 										if (!isSelected) replaceSelection(row);
-										setOpenActionsPath(
-											isFileRow ? row.file.path : row.id,
-										);
+										setOpenActionsPath(isFileRow ? row.file.path : row.id);
 									}}
 									title={row.label}
 								>

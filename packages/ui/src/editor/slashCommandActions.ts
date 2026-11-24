@@ -1,10 +1,10 @@
-import type { Editor } from "@tiptap/core";
-import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
-import { TextSelection } from "@tiptap/pm/state";
 import {
 	CHILD_PAGE_CREATE_EVENT,
 	type ChildPageCreateDetail,
 } from "@hubble.md/editor";
+import type { Editor } from "@tiptap/core";
+import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import {
 	AT_MENTION_REQUESTED_EVENT,
 	type AtMentionRequestedDetail,
@@ -250,10 +250,10 @@ function createEmptyBlock(
 						: kind === "toggleHeading3"
 							? 3
 							: 0;
-			return toggleBlock.create(
-				{ open: false, level },
-				[toggleSummary.create(), toggleContent.create(null, paragraph.create())],
-			);
+			return toggleBlock.create({ open: false, level }, [
+				toggleSummary.create(),
+				toggleContent.create(null, paragraph.create()),
+			]);
 		}
 		case "divider":
 			return horizontalRule.create();

@@ -31,9 +31,8 @@ function splitRelative(relative: string): string[] {
 }
 
 function pathJoin(workspacePath: string, parts: string[]): string {
-	const sep = workspacePath.includes("\\") && !workspacePath.includes("/")
-		? "\\"
-		: "/";
+	const sep =
+		workspacePath.includes("\\") && !workspacePath.includes("/") ? "\\" : "/";
 	const trimmed = workspacePath.replace(/[\\/]+$/, "");
 	return parts.length === 0 ? trimmed : `${trimmed}${sep}${parts.join(sep)}`;
 }
@@ -108,10 +107,7 @@ export function Breadcrumb() {
 					const isLast = index === segments.length - 1;
 					const key = `${index}:${segment.label}`;
 					return (
-						<li
-							key={key}
-							className="flex min-w-0 shrink items-center gap-0.5"
-						>
+						<li key={key} className="flex min-w-0 shrink items-center gap-0.5">
 							{segment.target ? (
 								<button
 									type="button"

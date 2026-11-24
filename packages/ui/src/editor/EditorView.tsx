@@ -1,4 +1,11 @@
 import {
+	computePosition,
+	flip,
+	offset,
+	shift,
+	type VirtualElement,
+} from "@floating-ui/dom";
+import {
 	buildWikiLinkValidTargetKeys,
 	ChildPage,
 	ContextMenuSpellcheckExtension,
@@ -30,22 +37,15 @@ import {
 	type JSONContent,
 	useEditor,
 } from "@tiptap/react";
-import {
-	computePosition,
-	flip,
-	offset,
-	shift,
-	type VirtualElement,
-} from "@floating-ui/dom";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AtMentionExtension } from "./AtMentionExtension";
 import { clearActiveEditor, setActiveEditor } from "./activeEditor";
 import { CODE_BLOCK_COPY_EVENT, HubbleCodeBlock } from "./CodeBlockExtension";
 import { copySelectionAsMarkdown } from "./copyAsMarkdown";
-import { AtMentionExtension } from "./AtMentionExtension";
 import { EmptyBlockDirectionExtension } from "./EmptyBlockDirectionExtension";
 import { LinkClickExtension } from "./LinkClickExtension";
 import { LinkCreationGhostExtension } from "./LinkCreationGhostExtension";
-import { type WikiTarget } from "./LinkPopover";
+import type { WikiTarget } from "./LinkPopover";
 import {
 	flushPendingSave,
 	type PendingSave,
@@ -54,12 +54,12 @@ import {
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { SmartLinkExtension } from "./SmartLinkExtension";
 import { TableCellSelectionExtension } from "./TableCellSelectionExtension";
-import { WikiLinkPicker } from "./WikiLinkPicker";
 import {
 	MarkdownTableCell,
 	MarkdownTableHeader,
 } from "./TableMarkdownExtensions";
 import { VirtualCursor } from "./VirtualCursor";
+import { WikiLinkPicker } from "./WikiLinkPicker";
 import { WikiLinkPreview } from "./WikiLinkPreview";
 import "./EditorView.css";
 import {
@@ -183,8 +183,7 @@ export function EditorView({
 	const lastCopyAsMarkdownRequestRef = useRef(copyAsMarkdownRequest);
 	const [editorViewportEl, setEditorViewportEl] =
 		useState<HTMLDivElement | null>(null);
-	const [cursorModeOverride, setCursorModeOverride] =
-		useState<VirtualCursorMode | null>(null);
+	const [cursorModeOverride] = useState<VirtualCursorMode | null>(null);
 	const [reviewCommentRequest, setReviewCommentRequest] = useState(0);
 	const [frontMatterState, setFrontMatterState] = useState(() =>
 		frontMatterStateFromMarkdown(initialMarkdown),
@@ -520,7 +519,7 @@ function useHoverPreview({
 		if (!onPreviewWikiLink) return;
 
 		let hoverTimer: ReturnType<typeof setTimeout> | null = null;
-		let loadToken = 0;
+		const loadState = { token: 0 };
 		let currentAnchor: HTMLElement | null = null;
 
 		const clearHover = () => {
@@ -528,7 +527,7 @@ function useHoverPreview({
 				clearTimeout(hoverTimer);
 				hoverTimer = null;
 			}
-			loadToken++;
+			loadState.token += 1;
 			currentAnchor = null;
 			setPreview(null);
 		};
@@ -576,10 +575,11 @@ function useHoverPreview({
 			if (hoverTimer) clearTimeout(hoverTimer);
 			hoverTimer = setTimeout(() => {
 				hoverTimer = null;
-				const token = ++loadToken;
+				loadState.token += 1;
+				const token = loadState.token;
 				void positionFor(anchor).then(async (position) => {
 					if (!position) return;
-					if (token !== loadToken) return;
+					if (token !== loadState.token) return;
 					const cached = cacheRef.current.get(target);
 					if (cached) {
 						setPreview({
@@ -593,7 +593,7 @@ function useHoverPreview({
 					setPreview({ position, title: target, excerpt: "", loading: true });
 					try {
 						const result = await onPreviewWikiLink(target);
-						if (token !== loadToken) return;
+						if (token !== loadState.token) return;
 						if (!result) {
 							setPreview(null);
 							return;
@@ -606,7 +606,7 @@ function useHoverPreview({
 							loading: false,
 						});
 					} catch {
-						if (token !== loadToken) return;
+						if (token !== loadState.token) return;
 						setPreview(null);
 					}
 				});

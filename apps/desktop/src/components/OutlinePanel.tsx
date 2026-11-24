@@ -22,10 +22,7 @@ export function OutlinePanel({ headings, onClose }: Props) {
 			.run();
 	};
 
-	const minLevel = headings.reduce(
-		(acc, h) => Math.min(acc, h.level),
-		6,
-	);
+	const minLevel = headings.reduce((acc, h) => Math.min(acc, h.level), 6);
 
 	return (
 		<aside

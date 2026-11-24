@@ -9,8 +9,8 @@ import {
 	useState,
 } from "react";
 import MingcuteBorderHorizontalLine from "~icons/mingcute/border-horizontal-line";
-import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
 import MingcuteDocumentLine from "~icons/mingcute/document-line";
+import MingcuteDownSmallLine from "~icons/mingcute/down-small-line";
 import MingcuteHeading1Line from "~icons/mingcute/heading-1-line";
 import MingcuteHeading2Line from "~icons/mingcute/heading-2-line";
 import MingcuteHeading3Line from "~icons/mingcute/heading-3-line";
@@ -110,7 +110,15 @@ const SLASH_COMMANDS: SlashCommand[] = [
 		kind: "toggle",
 		title: "Toggle",
 		description: "Collapsible block for hiding content",
-		aliases: ["toggle", "details", "collapse", "fold", "callout", "折叠", "展开"],
+		aliases: [
+			"toggle",
+			"details",
+			"collapse",
+			"fold",
+			"callout",
+			"折叠",
+			"展开",
+		],
 		icon: MingcuteDownSmallLine,
 	},
 	{

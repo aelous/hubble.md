@@ -10,6 +10,7 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import {
 	type RefObject,
+	useCallback,
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -101,7 +102,10 @@ function insertWikiLinkInline(
 	const spaceNode = editor.state.schema.text(" ");
 	const tr = editor.state.tr.replaceWith(atPos, endPos, [linkNode, spaceNode]);
 	tr.setSelection(
-		TextSelection.create(tr.doc, atPos + linkNode.nodeSize + spaceNode.nodeSize),
+		TextSelection.create(
+			tr.doc,
+			atPos + linkNode.nodeSize + spaceNode.nodeSize,
+		),
 	);
 	tr.setStoredMarks([]);
 	editor.view.dispatch(tr);
@@ -205,13 +209,14 @@ export function WikiLinkPicker({
 		query.trim().length > 0 &&
 		!hasExactMatch(wikiTargets, query);
 	const totalItems = suggestions.length + (canCreate ? 1 : 0);
-	const boundedIndex = totalItems === 0 ? 0 : Math.min(activeIndex, totalItems - 1);
+	const boundedIndex =
+		totalItems === 0 ? 0 : Math.min(activeIndex, totalItems - 1);
 
-	const closeSession = () => {
+	const closeSession = useCallback(() => {
 		setSession(null);
 		setInlineQuery("");
 		setActiveIndex(0);
-	};
+	}, []);
 
 	// Listen for @ trigger and /link trigger.
 	useEffect(() => {
@@ -258,8 +263,7 @@ export function WikiLinkPicker({
 			editor.off("selectionUpdate", update);
 			editor.off("blur", update);
 		};
-		// biome-ignore lint/correctness/useExhaustiveDependencies: closeSession is stable per render.
-	}, [editor, session]);
+	}, [editor, session, closeSession]);
 
 	// Positioning.
 	useLayoutEffect(() => {
@@ -278,44 +282,47 @@ export function WikiLinkPicker({
 			viewport.removeEventListener("scroll", place);
 			window.removeEventListener("resize", place);
 		};
-	}, [editor, session, viewportRef, totalItems]);
+	}, [editor, session, viewportRef]);
 
 	// Focus the input once when entering modal mode. We intentionally do NOT
 	// re-focus on every session change: `value={session.query}` causes a
 	// re-render on each keystroke, and re-selecting the input on each render
-	// would wipe the typed text.
+	// would wipe the typed text, so the effect keys only on whether we are in
+	// modal mode.
+	const isModalSession = session?.kind === "modal";
 	useEffect(() => {
-		if (!session || session.kind !== "modal") return;
+		if (!isModalSession) return;
 		queueMicrotask(() => {
 			inputRef.current?.focus();
 			inputRef.current?.select();
 		});
-		// Only run on the kind transition, not on query updates.
-		// biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
-	}, [session?.kind]);
+	}, [isModalSession]);
 
-	const applySuggestion = (suggestion: WikiTarget) => {
-		if (!editor || !session) return;
-		if (session.kind === "inline") {
-			insertWikiLinkInline(
-				editor,
-				session.atPos,
-				inlineQuery.length,
-				suggestion.target,
-				suggestion.title,
-			);
-		} else {
-			insertWikiLinkModal(
-				editor,
-				session.pos,
-				suggestion.target,
-				suggestion.title,
-			);
-		}
-		closeSession();
-	};
+	const applySuggestion = useCallback(
+		(suggestion: WikiTarget) => {
+			if (!editor || !session) return;
+			if (session.kind === "inline") {
+				insertWikiLinkInline(
+					editor,
+					session.atPos,
+					inlineQuery.length,
+					suggestion.target,
+					suggestion.title,
+				);
+			} else {
+				insertWikiLinkModal(
+					editor,
+					session.pos,
+					suggestion.target,
+					suggestion.title,
+				);
+			}
+			closeSession();
+		},
+		[editor, session, inlineQuery, closeSession],
+	);
 
-	const applyCreate = async () => {
+	const applyCreate = useCallback(async () => {
 		if (!editor || !session || !onCreateAndInsert) return;
 		const name = query.trim();
 		if (!name) return;
@@ -344,7 +351,7 @@ export function WikiLinkPicker({
 		} catch {
 			// swallow — the newly loaded doc may no longer have the insertion point.
 		}
-	};
+	}, [editor, session, onCreateAndInsert, query, inlineQuery, closeSession]);
 
 	// Keyboard.
 	useEffect(() => {
@@ -363,7 +370,8 @@ export function WikiLinkPicker({
 				event.stopPropagation();
 				const delta = event.key === "ArrowDown" ? 1 : -1;
 				setActiveIndex(
-					(index) => (Math.min(index, totalItems - 1) + delta + totalItems) % totalItems,
+					(index) =>
+						(Math.min(index, totalItems - 1) + delta + totalItems) % totalItems,
 				);
 				return;
 			}
@@ -381,7 +389,6 @@ export function WikiLinkPicker({
 		};
 		window.addEventListener("keydown", onKeyDown, true);
 		return () => window.removeEventListener("keydown", onKeyDown, true);
-		// biome-ignore lint/correctness/useExhaustiveDependencies: render-local callbacks stable.
 	}, [
 		editor,
 		session,
@@ -391,11 +398,13 @@ export function WikiLinkPicker({
 		canCreate,
 		applySuggestion,
 		applyCreate,
+		closeSession,
 	]);
 
 	if (!session) return null;
 
 	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: container only prevents mousedown from stealing editor focus; the options inside are the real controls.
 		<div
 			ref={floatingRef}
 			className="absolute z-4 w-[250px] overflow-hidden rounded-[var(--radius-popover)] border border-border bg-popover text-popover-foreground shadow-overlay"
@@ -474,7 +483,8 @@ export function WikiLinkPicker({
 							aria-selected={boundedIndex === suggestions.length}
 							className={cn(
 								"flex w-full min-w-0 items-center gap-1 rounded-[var(--radius-inner)] border-0 bg-transparent px-2 py-1 text-start text-[11px] leading-[15px] text-popover-foreground hover:bg-accent",
-								boundedIndex === suggestions.length && "bg-muted text-foreground",
+								boundedIndex === suggestions.length &&
+									"bg-muted text-foreground",
 							)}
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => void applyCreate()}

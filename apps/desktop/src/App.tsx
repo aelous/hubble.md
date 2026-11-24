@@ -14,8 +14,8 @@ import {
 } from "@hubble.md/editor";
 import {
 	Button,
-	classifyHref,
 	COPY_PAGE_LINK_EVENT,
+	classifyHref,
 	EditorView,
 	formatShortcut,
 	GlobalSearchPalette,
@@ -46,12 +46,12 @@ import {
 	recordRecentCommand,
 } from "./commands/recentCommands";
 import { buildAppCommands } from "./commands/useAppCommands";
+import { BacklinksPanel } from "./components/BacklinksPanel";
 import { Breadcrumb } from "./components/Breadcrumb";
 import { FileInfoBar } from "./components/FileInfoBar";
 import { HtmlAppEmptyState } from "./components/HtmlAppEmptyState";
 import { NewTabPage } from "./components/NewTabPage";
 import { OutlinePanel } from "./components/OutlinePanel";
-import { BacklinksPanel } from "./components/BacklinksPanel";
 import { Settings, type SettingsTarget } from "./components/Settings";
 import { type DesktopSidebarFocus, Sidebar } from "./components/Sidebar";
 import { SkippedSkillsDialog } from "./components/SkippedSkillsDialog";
@@ -208,8 +208,9 @@ function stripMarkdownSyntax(line: string): string {
 		.replace(/^\s*[-*+]\s+/, "")
 		.replace(/^\s*>\s?/, "")
 		.replace(/^\s*\d+\.\s+/, "")
-		.replace(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_, path, label) =>
-			label ?? path,
+		.replace(
+			/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g,
+			(_, path, label) => label ?? path,
 		)
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
 		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -717,8 +718,14 @@ function App() {
 				// still lets ProseMirror place it at a safe nearby position.
 				const node = childPageType.create({ href: created.target });
 				const doc = freshEditor.state.doc;
-				const safeStart = Math.min(Math.max(detail.blockStart, 0), doc.content.size);
-				const safeEnd = Math.min(Math.max(detail.blockEnd, safeStart), doc.content.size);
+				const safeStart = Math.min(
+					Math.max(detail.blockStart, 0),
+					doc.content.size,
+				);
+				const safeEnd = Math.min(
+					Math.max(detail.blockEnd, safeStart),
+					doc.content.size,
+				);
 				const block = doc.nodeAt(safeStart);
 				const replacingEmpty =
 					block?.type.name === "paragraph" && block.content.size === 0;
@@ -1089,54 +1096,54 @@ function App() {
 								<FileInfoBar scrollContainer={scrollContainerEl} />
 							) : null}
 							<div data-note-body className="flex-1 min-h-0 min-w-0 relative">
-							{state.status === "loading" && <p>Loading…</p>}
-							{state.status === "error" && (
-								<p>{state.error ?? "Failed to open file."}</p>
-							)}
-							{state.status !== "loading" &&
-								state.status !== "error" &&
-								!state.currentPath &&
-								!hasWorkspace && (
-									<div className="flex h-full items-center justify-center p-6">
-										<WelcomeScreen
-											onCreateFolder={() => void createWorkspaceWithSidebar()}
-											onOpenFolder={() => void openWorkspaceWithSidebar()}
-										/>
-									</div>
+								{state.status === "loading" && <p>Loading…</p>}
+								{state.status === "error" && (
+									<p>{state.error ?? "Failed to open file."}</p>
 								)}
-							{/* With no tabs open, the blank page doubles as the empty state. */}
-							{state.status !== "loading" &&
-								state.status !== "error" &&
-								(isNewTabPath(state.currentPath) ||
-									(!state.currentPath && hasWorkspace)) && (
-									<NewTabPage
-										folder={focusedCreationFolder}
-										onSearch={openSearch}
-									/>
-								)}
-							{state.status === "ready" &&
-								state.currentPath &&
-								!isNewTabPath(state.currentPath) && (
-									<div className="flex h-full min-h-0 flex-col">
-										{state.externalChange.kind === "conflict" && (
-											<ExternalChangeBanner
-												onKeepMyEdits={() => void forceKeepLocalEdits()}
-												onReloadFromDisk={reloadFromDiskConflict}
+								{state.status !== "loading" &&
+									state.status !== "error" &&
+									!state.currentPath &&
+									!hasWorkspace && (
+										<div className="flex h-full items-center justify-center p-6">
+											<WelcomeScreen
+												onCreateFolder={() => void createWorkspaceWithSidebar()}
+												onOpenFolder={() => void openWorkspaceWithSidebar()}
 											/>
-										)}
-										<Breadcrumb />
-										<DocumentViewer
-											path={state.currentPath}
-											content={state.content}
-											copyAsMarkdownRequest={copyAsMarkdownRequest}
-											viewMode={state.viewMode}
-											spellcheckStatus={spellcheckStatus}
-											onScrollContainerChange={setScrollContainerEl}
-											onHeadingsChange={setOutlineHeadings}
+										</div>
+									)}
+								{/* With no tabs open, the blank page doubles as the empty state. */}
+								{state.status !== "loading" &&
+									state.status !== "error" &&
+									(isNewTabPath(state.currentPath) ||
+										(!state.currentPath && hasWorkspace)) && (
+										<NewTabPage
+											folder={focusedCreationFolder}
+											onSearch={openSearch}
 										/>
-									</div>
-								)}
-						</div>
+									)}
+								{state.status === "ready" &&
+									state.currentPath &&
+									!isNewTabPath(state.currentPath) && (
+										<div className="flex h-full min-h-0 flex-col">
+											{state.externalChange.kind === "conflict" && (
+												<ExternalChangeBanner
+													onKeepMyEdits={() => void forceKeepLocalEdits()}
+													onReloadFromDisk={reloadFromDiskConflict}
+												/>
+											)}
+											<Breadcrumb />
+											<DocumentViewer
+												path={state.currentPath}
+												content={state.content}
+												copyAsMarkdownRequest={copyAsMarkdownRequest}
+												viewMode={state.viewMode}
+												spellcheckStatus={spellcheckStatus}
+												onScrollContainerChange={setScrollContainerEl}
+												onHeadingsChange={setOutlineHeadings}
+											/>
+										</div>
+									)}
+							</div>
 						</div>
 						{outlineOpen && isFileOpen ? (
 							<OutlinePanel

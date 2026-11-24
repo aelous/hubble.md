@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 
-import { TURN_INTO_PAGE_EVENT, type TurnIntoPageDetail } from "@hubble.md/editor";
+import {
+	TURN_INTO_PAGE_EVENT,
+	type TurnIntoPageDetail,
+} from "@hubble.md/editor";
 import { Editor, type JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";

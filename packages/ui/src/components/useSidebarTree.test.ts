@@ -76,10 +76,7 @@ describe("buildFileTree", () => {
 
 	it("absorbs a non-empty sibling folder into the paired .md file", () => {
 		const tree = buildFileTree(
-			[
-				{ path: "/workspace/A.md" },
-				{ path: "/workspace/A/child.md" },
-			],
+			[{ path: "/workspace/A.md" }, { path: "/workspace/A/child.md" }],
 			[{ path: "/workspace/A" }],
 			getDisplayPath,
 		);

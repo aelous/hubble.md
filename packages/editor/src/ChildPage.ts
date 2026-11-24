@@ -66,11 +66,7 @@ export const ChildPage = Node.create({
 					"data-link": "true",
 					"data-child-page-link": "true",
 				},
-				[
-					"span",
-					{ "data-child-page-icon": "", "aria-hidden": "true" },
-					"",
-				],
+				["span", { "data-child-page-icon": "", "aria-hidden": "true" }, ""],
 				["span", { "data-child-page-title": "" }, title],
 			],
 		];
@@ -101,7 +97,9 @@ export const ChildPage = Node.create({
 
 			const title = document.createElement("span");
 			title.setAttribute("data-child-page-title", "");
-			title.textContent = wikiDisplayNameForTarget(String(node.attrs.href ?? ""));
+			title.textContent = wikiDisplayNameForTarget(
+				String(node.attrs.href ?? ""),
+			);
 
 			link.appendChild(icon);
 			link.appendChild(title);

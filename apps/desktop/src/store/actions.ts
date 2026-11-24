@@ -14,6 +14,7 @@ import {
 	isChangelogPath,
 	prepareChangelogMarkdown,
 } from "../lib/changelogNote";
+import { copyText } from "../lib/clipboard";
 import { keyedQueue, takeLatest } from "../lib/concurrency";
 import {
 	absoluteWorkspacePath,
@@ -34,7 +35,6 @@ import {
 	relativeWorkspacePath,
 	replacePathPrefix,
 } from "../lib/filePath";
-import { copyText } from "../lib/clipboard";
 import {
 	indexMovedFiles,
 	type MovedFile,
@@ -1417,9 +1417,7 @@ export async function createChildPage(
 				};
 			});
 		}
-		const requestedStem = options?.name
-			? sanitizeFileStem(options.name)
-			: "";
+		const requestedStem = options?.name ? sanitizeFileStem(options.name) : "";
 		const childPath = uniqueFilePath(
 			siblingFolder,
 			requestedStem || "Untitled",
@@ -1479,7 +1477,8 @@ function uniqueDuplicateStem(
 		folders.map((folder) => folder.path.toLocaleLowerCase()),
 	);
 	for (let index = 1; ; index++) {
-		const stem = index === 1 ? `${sourceStem} copy` : `${sourceStem} copy ${index}`;
+		const stem =
+			index === 1 ? `${sourceStem} copy` : `${sourceStem} copy ${index}`;
 		const filePath = joinPath(parent, `${stem}${extension}`);
 		if (fileSet.has(filePath.toLocaleLowerCase())) continue;
 		if (requirePairedFolderFree) {

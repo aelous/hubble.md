@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import MingcuteDownLine from "~icons/mingcute/down-line";
 import MingcuteRefresh2Line from "~icons/mingcute/refresh-2-line";
 import {
-	type BacklinkSource,
 	BACKLINK_MAX_SNIPPETS_PER_SOURCE,
+	type BacklinkSource,
 	findBacklinks,
 } from "../lib/backlinks";
 import { basename, relativeWorkspacePath } from "../lib/filePath";
@@ -59,6 +59,8 @@ export function BacklinksPanel({
 	}, []);
 
 	useEffect(() => {
+		// refreshToken is read so the effect re-runs when disk changes bump it.
+		void refreshToken;
 		if (!workspacePath) {
 			setSources([]);
 			setStatus("ready");
