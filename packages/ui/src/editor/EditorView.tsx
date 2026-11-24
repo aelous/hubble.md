@@ -41,10 +41,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { clearActiveEditor, setActiveEditor } from "./activeEditor";
 import { CODE_BLOCK_COPY_EVENT, HubbleCodeBlock } from "./CodeBlockExtension";
 import { copySelectionAsMarkdown } from "./copyAsMarkdown";
+import { AtMentionExtension } from "./AtMentionExtension";
 import { EmptyBlockDirectionExtension } from "./EmptyBlockDirectionExtension";
 import { LinkClickExtension } from "./LinkClickExtension";
 import { LinkCreationGhostExtension } from "./LinkCreationGhostExtension";
-import { LinkPopover, type WikiTarget } from "./LinkPopover";
+import { type WikiTarget } from "./LinkPopover";
 import {
 	flushPendingSave,
 	type PendingSave,
@@ -53,6 +54,7 @@ import {
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { SmartLinkExtension } from "./SmartLinkExtension";
 import { TableCellSelectionExtension } from "./TableCellSelectionExtension";
+import { WikiLinkPicker } from "./WikiLinkPicker";
 import {
 	MarkdownTableCell,
 	MarkdownTableHeader,
@@ -161,6 +163,7 @@ export function EditorView({
 	onMessage,
 	onReviewThreadsChange,
 	onHeadingsChange,
+	onCreateAndInsertWikiPage,
 	spellcheckStatus,
 	hasOpenWorkspaceFile = false,
 }: EditorViewProps) {
@@ -242,6 +245,7 @@ export function EditorView({
 			MarkdownRolloverExtension,
 			ReviewMarkExtension,
 			EditorCommandShortcuts,
+			AtMentionExtension,
 			WikiLinkValidityExtension,
 			...listExtensions,
 			...toggleExtensions,
@@ -440,17 +444,13 @@ export function EditorView({
 				)}
 				{editable && (
 					<>
-						<LinkPopover
+						<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
+						<WikiLinkPicker
 							editor={editor}
-							containerRef={editorRootRef}
 							viewportRef={editorViewportRef}
 							wikiTargets={wikiTargets}
-							onOpenExternalLink={onOpenExternalLink}
-							onOpenWikiLink={onOpenWikiLink}
-							onMessage={onMessage}
-							onCursorModeChange={setCursorModeOverride}
+							onCreateAndInsert={onCreateAndInsertWikiPage}
 						/>
-						<SlashCommandMenu editor={editor} viewportRef={editorViewportRef} />
 						<SelectionFormattingToolbar
 							editor={editor}
 							viewport={editorViewportEl}

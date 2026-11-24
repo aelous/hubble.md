@@ -1388,7 +1388,7 @@ export function createMarkdownFileInFolder(
  */
 export async function createChildPage(
 	parentPath: string,
-	options?: { markdown?: string },
+	options?: { markdown?: string; name?: string },
 ): Promise<{ path: string; target: string } | null> {
 	const workspacePath = workspaceStore.get().workspacePath;
 	if (!workspacePath) return null;
@@ -1417,7 +1417,14 @@ export async function createChildPage(
 				};
 			});
 		}
-		const childPath = uniqueFilePath(siblingFolder, "Untitled", ".md");
+		const requestedStem = options?.name
+			? sanitizeFileStem(options.name)
+			: "";
+		const childPath = uniqueFilePath(
+			siblingFolder,
+			requestedStem || "Untitled",
+			".md",
+		);
 		await desktopApi.writeFileText(childPath, options?.markdown ?? "");
 		const modified_at = Math.floor(Date.now() / 1000);
 		workspaceStore.set((state) => ({

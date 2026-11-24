@@ -99,7 +99,6 @@ import {
 	closeActiveTab,
 	copyPageLink,
 	createChildPage,
-	createMarkdownFileWithName,
 	createWorkspaceWithSidebar,
 	editorDocumentId,
 	forceKeepLocalEdits,
@@ -1467,11 +1466,9 @@ function MarkdownEditor({
 						}
 					}}
 					onCreateAndInsertWikiPage={async (name) => {
-						const parent = dirname(path) ?? workspace.workspacePath;
-						if (!parent) return null;
-						const createdPath = await createMarkdownFileWithName(parent, name);
-						if (!createdPath) return null;
-						return relativeWorkspacePath(createdPath, workspace.workspacePath);
+						if (!path || !hasMarkdownExtension(path)) return null;
+						const result = await createChildPage(path, { name });
+						return result?.target ?? null;
 					}}
 					onMessage={(message, kind) =>
 						kind === "success" ? toast.success(message) : toast.error(message)

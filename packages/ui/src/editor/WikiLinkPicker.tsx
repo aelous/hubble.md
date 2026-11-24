@@ -93,17 +93,17 @@ function insertWikiLinkInline(
 	if (!linkType) return;
 	const text = alias ?? wikiDisplayNameForTarget(target);
 	const endPos = atPos + 1 + queryLength;
-	const node = editor.state.schema.text(text, [
+	const linkNode = editor.state.schema.text(text, [
 		linkType.create({ href: target, kind: "wiki", target }),
 	]);
-	const tr = editor.state.tr.replaceWith(atPos, endPos, node);
-	tr.setSelection(TextSelection.create(tr.doc, atPos + node.nodeSize));
-	// Clear the link mark from stored marks so subsequent typing isn't linked.
-	tr.setStoredMarks(
-		(tr.selection.$from.marks() ?? []).filter(
-			(mark) => mark.type !== linkType,
-		),
+	// Append a trailing unmarked space so the caret lands outside the inclusive
+	// link mark — otherwise further typing continues the link.
+	const spaceNode = editor.state.schema.text(" ");
+	const tr = editor.state.tr.replaceWith(atPos, endPos, [linkNode, spaceNode]);
+	tr.setSelection(
+		TextSelection.create(tr.doc, atPos + linkNode.nodeSize + spaceNode.nodeSize),
 	);
+	tr.setStoredMarks([]);
 	editor.view.dispatch(tr);
 	editor.commands.focus(undefined, { scrollIntoView: false });
 }
@@ -116,16 +116,16 @@ function insertWikiLinkModal(
 ) {
 	const linkType = editor.state.schema.marks.link;
 	if (!linkType) return;
-	const node = editor.state.schema.text(text, [
+	const linkNode = editor.state.schema.text(text, [
 		linkType.create({ href: target, kind: "wiki", target }),
 	]);
-	const tr = editor.state.tr.insert(pos, node);
-	tr.setSelection(TextSelection.create(tr.doc, pos + node.nodeSize));
-	tr.setStoredMarks(
-		(tr.selection.$from.marks() ?? []).filter(
-			(mark) => mark.type !== linkType,
-		),
+	const spaceNode = editor.state.schema.text(" ");
+	const tr = editor.state.tr.insert(pos, linkNode);
+	tr.insert(pos + linkNode.nodeSize, spaceNode);
+	tr.setSelection(
+		TextSelection.create(tr.doc, pos + linkNode.nodeSize + spaceNode.nodeSize),
 	);
+	tr.setStoredMarks([]);
 	editor.view.dispatch(tr);
 	editor.commands.focus(undefined, { scrollIntoView: false });
 }
@@ -280,14 +280,19 @@ export function WikiLinkPicker({
 		};
 	}, [editor, session, viewportRef, totalItems]);
 
-	// Focus the input when in modal mode.
+	// Focus the input once when entering modal mode. We intentionally do NOT
+	// re-focus on every session change: `value={session.query}` causes a
+	// re-render on each keystroke, and re-selecting the input on each render
+	// would wipe the typed text.
 	useEffect(() => {
 		if (!session || session.kind !== "modal") return;
 		queueMicrotask(() => {
 			inputRef.current?.focus();
 			inputRef.current?.select();
 		});
-	}, [session]);
+		// Only run on the kind transition, not on query updates.
+		// biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
+	}, [session?.kind]);
 
 	const applySuggestion = (suggestion: WikiTarget) => {
 		if (!editor || !session) return;
@@ -317,11 +322,11 @@ export function WikiLinkPicker({
 		// Snapshot session before any await — the editor may update during creation.
 		const currentSession = session;
 		const inlineQueryLen = inlineQuery.length;
+		// Close the picker UI immediately; the heavy filesystem work runs after.
+		// Any error path below silently bails without reopening.
+		closeSession();
 		const created = await onCreateAndInsert(name);
-		if (!created) {
-			closeSession();
-			return;
-		}
+		if (!created) return;
 		// If the editor state has shifted (e.g. because file creation remounted
 		// the editor), bail without throwing.
 		try {
@@ -339,7 +344,6 @@ export function WikiLinkPicker({
 		} catch {
 			// swallow — the newly loaded doc may no longer have the insertion point.
 		}
-		closeSession();
 	};
 
 	// Keyboard.
@@ -408,6 +412,24 @@ export function WikiLinkPicker({
 						type="text"
 						value={session.query}
 						placeholder="Search pages…"
+						onKeyDown={(event) => {
+							// Stop every keystroke from bubbling into ProseMirror; the
+							// window-capture handler above still gets Esc/Enter/arrows
+							// because they're dispatched before the input receives them.
+							if (
+								event.key !== "Escape" &&
+								event.key !== "Enter" &&
+								event.key !== "Tab" &&
+								event.key !== "ArrowDown" &&
+								event.key !== "ArrowUp"
+							) {
+								event.stopPropagation();
+							}
+						}}
+						onKeyUp={(event) => event.stopPropagation()}
+						onKeyPress={(event) => event.stopPropagation()}
+						onBeforeInput={(event) => event.stopPropagation()}
+						onInput={(event) => event.stopPropagation()}
 						onChange={(event) => {
 							const value = event.target.value;
 							setSession({ ...session, query: value });

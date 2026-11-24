@@ -5,6 +5,7 @@ import {
 	TextSelection,
 	type Transaction,
 } from "@tiptap/pm/state";
+import { AT_MENTION_REQUESTED_EVENT } from "./AtMentionExtension";
 export const FOCUS_LINK_POPOVER_EVENT = "hubble:focus-link-popover";
 export const LINK_CREATION_REQUESTED_EVENT = "hubble:link-creation-requested";
 
@@ -54,7 +55,7 @@ export const SmartLinkExtension = Extension.create({
 			new Plugin({
 				props: {
 					handleTextInput(view, from, _to, text) {
-						// Detect `[[` to expand link popover
+						// Detect `[[` to open the wiki-link picker (with Create option).
 						if (text !== "[") return false;
 						if (
 							from <= 1 ||
@@ -67,11 +68,14 @@ export const SmartLinkExtension = Extension.create({
 						const tr = view.state.tr.delete(pos, from);
 						tr.setSelection(TextSelection.create(tr.doc, pos));
 						view.dispatch(tr);
-						window.dispatchEvent(
-							new CustomEvent(LINK_CREATION_REQUESTED_EVENT, {
-								detail: { pos },
-							}),
-						);
+						// Modal picker (same as /link): offers "Create 'name'" when no match.
+						queueMicrotask(() => {
+							window.dispatchEvent(
+								new CustomEvent(AT_MENTION_REQUESTED_EVENT, {
+									detail: { pos, insertPlain: true },
+								}),
+							);
+						});
 						return true;
 					},
 				},

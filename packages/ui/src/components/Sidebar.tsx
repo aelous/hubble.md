@@ -1068,18 +1068,40 @@ export function Sidebar({
 						row.kind === "folder" || row.kind === "pairedFile"
 							? row.expanded
 							: false;
-					const chevron = (
-						<span className="inline-flex size-3 shrink-0 items-center justify-center text-muted-foreground">
-							{(row.kind === "folder" || row.kind === "pairedFile") && (
+					const chevron =
+						row.kind === "pairedFile" ? (
+							<span
+								role="button"
+								tabIndex={-1}
+								aria-label={rowExpanded ? "Collapse" : "Expand"}
+								onMouseDown={(event) => event.stopPropagation()}
+								onClick={(event) => {
+									event.stopPropagation();
+									event.preventDefault();
+									if (rowExpanded) collapseFolder(row.file.path);
+									else expandFolder(row.file.path);
+								}}
+								className="inline-flex size-3 shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground"
+							>
 								<MingcuteRightLine
 									className={cn(
 										"size-3 transition-transform duration-150 ease-out",
 										rowExpanded && "rotate-90",
 									)}
 								/>
-							)}
-						</span>
-					);
+							</span>
+						) : (
+							<span className="inline-flex size-3 shrink-0 items-center justify-center text-muted-foreground">
+								{row.kind === "folder" && (
+									<MingcuteRightLine
+										className={cn(
+											"size-3 transition-transform duration-150 ease-out",
+											rowExpanded && "rotate-90",
+										)}
+									/>
+								)}
+							</span>
+						);
 					const dropGroup = dropTarget
 						? rowDropGroup({
 								target: dropTarget,
