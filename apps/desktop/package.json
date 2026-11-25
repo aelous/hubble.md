@@ -101,7 +101,7 @@
 		"publish": [
 			{
 				"provider": "github",
-				"owner": "bholmesdev",
+				"owner": "aelous",
 				"repo": "hubble.md",
 				"tagNamePrefix": "desktop-v",
 				"releaseType": "release"
