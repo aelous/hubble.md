@@ -4,7 +4,7 @@ import type { TelemetryChoice, TelemetryConsent } from "../desktopApi/types";
 import { SettingsSection } from "./SettingsDialog";
 
 const telemetryDocUrl =
-	"https://github.com/bholmesdev/hubble.md/blob/main/TELEMETRY.md";
+	"https://github.com/aelous/hubble.md/blob/main/TELEMETRY.md";
 
 function WhatsCollectedLink() {
 	return (

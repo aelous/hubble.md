@@ -11,7 +11,11 @@ const markerComment = `<!-- ${INSTALLED_MARKER}. Hubble updates this skill when 
 
 // Repos the skills CLI may have installed Hubble skills from, as recorded in
 // the `source` field of its lock file.
-const SKILLS_CLI_SOURCES = ["bholmesdev/hubble-skills", "bholmesdev/hubble.md"];
+const SKILLS_CLI_SOURCES = [
+	"bholmesdev/hubble-skills",
+	"bholmesdev/hubble.md",
+	"aelous/hubble.md",
+];
 
 const STAGING_DIR = ".hubble-staging";
 

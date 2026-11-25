@@ -11,7 +11,7 @@ import {
 import { tildePath } from "../lib/tildePath";
 
 // No -g, so the skills CLI asks which agents and folder to install into.
-const INSTALL_COMMAND = "npx skills add bholmesdev/hubble.md";
+const INSTALL_COMMAND = "npx skills add aelous/hubble.md";
 const SKILLS_POLL_INTERVAL_MS = 2000;
 
 function buildPrompt(filePath: string): string {

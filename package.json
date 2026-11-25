@@ -8,10 +8,10 @@
 	"author": "Ben Holmes <hey@bholmes.dev>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bholmesdev/hubble.md.git"
+		"url": "git+https://github.com/aelous/hubble.md.git"
 	},
 	"homepage": "https://hubble.md",
-	"bugs": "https://github.com/bholmesdev/hubble.md/issues",
+	"bugs": "https://github.com/aelous/hubble.md/issues",
 	"scripts": {
 		"check": "biome check .",
 		"check:react-compiler": "node scripts/audit-react-compiler.mjs",

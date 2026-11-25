@@ -46,7 +46,7 @@ import { canGoBack, canGoForward } from "../store/history";
 import { tabsStore } from "../store/tabStore";
 
 const CONTRIBUTING_URL =
-	"https://github.com/bholmesdev/hubble.md/blob/main/CONTRIBUTING.md";
+	"https://github.com/aelous/hubble.md/blob/main/CONTRIBUTING.md";
 
 export type AppCommandContext = {
 	currentPath: string | null;
