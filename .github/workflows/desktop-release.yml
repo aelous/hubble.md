@@ -99,11 +99,15 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
           pnpm --filter @hubble.md/desktop... --if-present build
+          SIGN_ARGS=""
           if [ -z "$CSC_LINK" ]; then
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             export CSC_IDENTITY_AUTO_DISCOVERY=false
+            # Without a Developer ID, ad-hoc sign so Gatekeeper reports an
+            # unidentified developer (openable) instead of a "damaged" app.
+            SIGN_ARGS="-c.mac.identity=- -c.mac.hardenedRuntime=false"
           fi
-          pnpm --filter @hubble.md/desktop exec electron-builder --mac --publish always
+          pnpm --filter @hubble.md/desktop exec electron-builder --mac --publish always $SIGN_ARGS
 
   release-linux:
     name: Build and publish desktop app (Linux ${{ matrix.arch }})
